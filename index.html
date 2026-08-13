@@ -224,7 +224,11 @@ h1 .dot { color: var(--accent); }
   border-top: 1px solid var(--border); padding: 0.9rem 1.25rem;
   display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
 }
-.admin-foot .note { font-size: 0.72rem; color: var(--text-secondary); flex: 1; min-width: 160px; line-height: 1.45; }
+.admin-foot .note {
+  font-size: 0.72rem; color: var(--text-secondary);
+  flex: 1; min-width: 160px; line-height: 1.45;
+  display: flex; flex-direction: column; gap: 0.25rem;
+}
 
 /* ── Toast ─────────────────────────────────────────────────────────────────── */
 .toast {
@@ -326,7 +330,11 @@ footer a:hover { text-decoration: underline; }
       <button class="btn btn-primary" id="addBtn" type="submit">Afegir</button>
     </form>
     <div class="admin-foot">
-      <span class="note" id="ownCount"></span>
+      <span class="note">
+        <span id="ownCount"></span>
+        <span id="secretState"></span>
+      </span>
+      <button class="btn" id="secretBtn" type="button"></button>
     </div>
   </div>
 </div>
@@ -401,8 +409,13 @@ const SECRET_KEY = 'oriol_maquetes.admin_secret';
 let ownVideos = [];                  // els que venen del Worker
 let loading = true;
 
-// La contrasenya es demana un cop i es desa en aquest navegador.
-// Si el servidor la rebutja (401) s'esborra i es torna a demanar la vegada següent.
+// La contrasenya no es demana en obrir el formulari, sinó quan hi ha alguna cosa
+// per enviar al Worker: en afegir un vídeo o en eliminar-lo. Es desa en aquest
+// navegador; si el servidor la rebutja (401) s'esborra i es torna a demanar.
+function hasSecret() {
+  try { return !!localStorage.getItem(SECRET_KEY); } catch { return false; }
+}
+
 function getSecret() {
   let s = '';
   try { s = localStorage.getItem(SECRET_KEY) || ''; } catch {}
@@ -410,12 +423,33 @@ function getSecret() {
     s = (prompt('Contrasenya d\'administrador:') || '').trim();
     if (!s) return null;
     try { localStorage.setItem(SECRET_KEY, s); } catch {}
+    updateSecretUi();
   }
   return s;
 }
 
 function forgetSecret() {
   try { localStorage.removeItem(SECRET_KEY); } catch {}
+  updateSecretUi();
+}
+
+// Permet posar-ne una de nova, o oblidar la desada deixant la resposta buida.
+function changeSecret() {
+  const had = hasSecret();
+  const answer = prompt(had
+    ? 'Escriu la contrasenya nova. Si ho deixes buit, s\'oblidarà la que hi ha desada.'
+    : 'Contrasenya d\'administrador:', '');
+  if (answer === null) return;                     // ha cancel·lat
+
+  const s = answer.trim();
+  if (s) {
+    try { localStorage.setItem(SECRET_KEY, s); } catch {}
+    updateSecretUi();
+    toast('Contrasenya desada en aquest navegador');
+  } else if (had) {
+    forgetSecret();
+    toast('Contrasenya oblidada');
+  }
 }
 
 async function api(path, options = {}) {
@@ -585,6 +619,8 @@ const titleInput = document.getElementById('titleInput');
 const formMsg    = document.getElementById('formMsg');
 const addBtn     = document.getElementById('addBtn');
 const ownCount   = document.getElementById('ownCount');
+const secretBtn  = document.getElementById('secretBtn');
+const secretState= document.getElementById('secretState');
 const toastEl    = document.getElementById('toast');
 
 let toastTimer;
@@ -600,10 +636,19 @@ function setMsg(text, kind = '') {
   formMsg.className = `form-msg ${kind}`;
 }
 
+function updateSecretUi() {
+  const has = hasSecret();
+  secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
+  secretState.textContent = has
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar.'
+    : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
+}
+
 function openAdmin() {
   adminModal.classList.add('open');
   document.body.style.overflow = 'hidden';
   setMsg('');
+  updateSecretUi();
   urlInput.focus();
 }
 
@@ -614,6 +659,7 @@ function closeAdmin() {
 
 document.getElementById('fab').addEventListener('click', openAdmin);
 document.getElementById('adminClose').addEventListener('click', closeAdmin);
+secretBtn.addEventListener('click', changeSecret);
 adminModal.addEventListener('click', e => { if (e.target === adminModal) closeAdmin(); });
 
 // Demana el títol real del vídeo a l'API oEmbed de YouTube (permet CORS).
@@ -696,6 +742,7 @@ document.addEventListener('keydown', e => {
   else if (modal.classList.contains('open')) closeModal();
 });
 
+updateSecretUi();
 render();
 refresh();
 </script>
