@@ -75,22 +75,31 @@ h1 .dot { color: var(--accent); }
   gap: 1.25rem;
 }
 .card {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
   display: flex; flex-direction: column;
-  cursor: pointer;
-  text-align: left;
-  font: inherit; color: inherit;
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
-.card:hover, .card:focus-visible {
+.card:hover, .card:focus-within {
   transform: translateY(-3px);
   border-color: var(--border-accent);
   background: var(--bg-card-hover);
   box-shadow: 0 10px 28px var(--shadow);
-  outline: none;
+}
+/* Zona clicable: tota la targeta menys el botó d'eliminar. */
+.card-main {
+  flex: 1; display: flex; flex-direction: column;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.card-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.card.flash { animation: flash 1.4s ease; }
+@keyframes flash {
+  0%, 100% { box-shadow: 0 10px 28px var(--shadow); }
+  25%      { box-shadow: 0 0 0 3px var(--accent); }
 }
 .thumb-wrap { position: relative; aspect-ratio: 16 / 9; background: var(--bg-secondary); overflow: hidden; }
 .thumb { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease; }
@@ -117,6 +126,21 @@ h1 .dot { color: var(--accent); }
   border-radius: 6px; padding: 0.15rem 0.45rem;
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
 }
+.badge-own { background: rgba(255,255,255,0.07); color: var(--text-secondary); margin-left: 0; }
+
+/* Botó d'eliminar: només a les targetes afegides per l'usuari. */
+.card-del {
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(18,18,26,0.78); border: 1px solid rgba(255,255,255,0.18);
+  color: #fff; font-size: 1rem; line-height: 1; cursor: pointer;
+  display: grid; place-items: center;
+  opacity: 0; transition: opacity 0.18s, background 0.18s, border-color 0.18s;
+  backdrop-filter: blur(3px);
+}
+.card:hover .card-del, .card-del:focus-visible { opacity: 1; }
+.card-del:hover { background: #d63a2a; border-color: #d63a2a; }
+@media (hover: none) { .card-del { opacity: 0.85; } }
 
 .empty { color: var(--text-secondary); text-align: center; padding: 3rem 1rem; font-size: 0.92rem; }
 
@@ -156,20 +180,95 @@ h1 .dot { color: var(--accent); }
 .btn-close { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn-close:hover { background: #ff7357; color: #fff; border-color: #ff7357; }
 
+/* ── Panell d'administració ────────────────────────────────────────────────── */
+.fab {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 40;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  border: 0; font-size: 1.9rem; line-height: 1; font-family: inherit;
+  cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 6px 20px rgba(255,92,61,0.38);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.fab:hover { background: #ff7357; transform: scale(1.07); }
+.fab span { margin-top: -3px; }
+
+.admin-box { max-width: 520px; }
+.admin-head { display: flex; align-items: center; gap: 0.75rem; padding: 1.1rem 1.25rem 0; }
+.admin-head h2 { font-size: 1.05rem; font-weight: 700; }
+.admin-close {
+  margin-left: auto; background: none; border: 0; color: var(--text-secondary);
+  font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 0.2rem; font-family: inherit;
+}
+.admin-close:hover { color: var(--text-primary); }
+.admin-form { padding: 1rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; }
+.field label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+.field .opt { font-weight: 400; opacity: 0.75; }
+.field input {
+  background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary);
+  padding: 0.65rem 0.85rem; border-radius: 9px;
+  font-size: 0.88rem; font-family: inherit; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.field input:focus { border-color: var(--border-accent); background: var(--bg-card); }
+.field input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+.field .help { font-size: 0.72rem; color: var(--text-secondary); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); padding: 0.7rem 1rem; }
+.btn-primary:hover { background: #ff7357; color: #fff; border-color: #ff7357; }
+.btn-primary:disabled { background: #4a3a38; border-color: #4a3a38; color: #9a8c8a; cursor: not-allowed; }
+.form-msg { font-size: 0.78rem; min-height: 1.1em; color: var(--text-secondary); }
+.form-msg.error { color: #ff6b58; }
+.form-msg.ok { color: #4ec98a; }
+.admin-foot {
+  border-top: 1px solid var(--border); padding: 0.9rem 1.25rem;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+}
+.admin-foot .note { font-size: 0.72rem; color: var(--text-secondary); flex: 1; min-width: 160px; line-height: 1.45; }
+
+/* ── Exportació ────────────────────────────────────────────────────────────── */
+.export-box { max-width: 680px; }
+.export-body { padding: 1rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.export-body p { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+.export-body code { background: var(--bg-secondary); padding: 0.1rem 0.3rem; border-radius: 4px; color: var(--text-primary); }
+#exportText {
+  width: 100%; height: 260px; resize: vertical;
+  background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary);
+  border-radius: 9px; padding: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.76rem; line-height: 1.6; white-space: pre; outline: none;
+}
+#exportText:focus { border-color: var(--border-accent); }
+.export-actions { display: flex; gap: 0.5rem; }
+
+/* ── Toast ─────────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(1rem);
+  z-index: 60; background: var(--bg-card); border: 1px solid var(--border-accent);
+  color: var(--text-primary); padding: 0.7rem 1.1rem; border-radius: 10px;
+  font-size: 0.84rem; box-shadow: 0 10px 30px var(--shadow);
+  opacity: 0; pointer-events: none; transition: opacity 0.22s, transform 0.22s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.78rem; text-align: center; }
 footer a { color: var(--accent); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 
 /* ── Mòbil ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  body { padding: 1.5rem 0.9rem 3rem; }
+  body { padding: 1.5rem 0.9rem 5.5rem; }
   h1 { font-size: 1.45rem; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
-  .modal { padding: 0; align-items: flex-start; }
+  .modal { padding: 0; align-items: flex-start; overflow-y: auto; }
   .modal-box { border-radius: 0; max-width: 100%; margin-top: 0; }
   .modal-bar { flex-wrap: wrap; }
   .modal-actions { width: 100%; margin-left: 0; }
   .btn { flex: 1; text-align: center; }
+  .fab { bottom: 1rem; right: 1rem; width: 52px; height: 52px; }
+  .toast { bottom: 5rem; width: calc(100% - 2rem); text-align: center; }
+  .admin-box, .export-box { min-height: 100%; }
+  .export-actions .btn { flex: 1; }
 }
 @media (max-width: 380px) {
   .grid { grid-template-columns: 1fr; }
@@ -220,6 +319,55 @@ footer a:hover { text-decoration: underline; }
   </div>
 </div>
 
+<!-- ── Panell d'administració ────────────────────────────────────────────────── -->
+<button class="fab" id="fab" type="button" title="Afegir un vídeo" aria-label="Afegir un vídeo"><span>+</span></button>
+
+<div class="modal" id="adminModal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+  <div class="modal-box admin-box">
+    <div class="admin-head">
+      <h2 id="adminTitle">Afegir un vídeo</h2>
+      <button class="admin-close" id="adminClose" type="button" aria-label="Tanca">&times;</button>
+    </div>
+    <form class="admin-form" id="adminForm">
+      <div class="field">
+        <label for="urlInput">URL del vídeo de YouTube</label>
+        <input type="text" id="urlInput" placeholder="https://youtu.be/… o https://www.youtube.com/watch?v=…" autocomplete="off" spellcheck="false">
+        <span class="help">Serveix qualsevol format: youtu.be, /watch?v=, /shorts/, /embed/ o l'ID sol.</span>
+      </div>
+      <div class="field">
+        <label for="titleInput">Títol <span class="opt">(opcional)</span></label>
+        <input type="text" id="titleInput" placeholder="Si el deixes buit, s'agafa el títol real de YouTube" autocomplete="off">
+      </div>
+      <p class="form-msg" id="formMsg" role="status"></p>
+      <button class="btn btn-primary" id="addBtn" type="submit">Afegir</button>
+    </form>
+    <div class="admin-foot">
+      <span class="note" id="ownCount"></span>
+      <button class="btn" id="exportBtn" type="button">Exportar llista</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Exportació ────────────────────────────────────────────────────────────── -->
+<div class="modal" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+  <div class="modal-box export-box">
+    <div class="admin-head">
+      <h2 id="exportTitle">Exportar la llista</h2>
+      <button class="admin-close" id="exportClose" type="button" aria-label="Tanca">&times;</button>
+    </div>
+    <div class="export-body">
+      <p>Els vídeos afegits des d'aquí només es veuen en aquest navegador. Per fer-los permanents per a tothom, substitueix la constant <code>VIDEOS</code> de l'<code>index.html</code> per aquest text i puja el canvi.</p>
+      <textarea id="exportText" readonly spellcheck="false"></textarea>
+      <div class="export-actions">
+        <button class="btn btn-primary" id="copyBtn" type="button">Copia al porta-retalls</button>
+        <button class="btn" id="exportBack" type="button">Tanca</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    LLISTA DE VÍDEOS
@@ -249,7 +397,15 @@ const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','
 function formatDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
   if (!m) return iso || '';
-  return `${Number(m[3])} de ${MESOS[Number(m[2]) - 1]} de ${m[1]}`;
+  const mes = MESOS[Number(m[2]) - 1];
+  const de = /^[aeiou]/.test(mes) ? "d'" : 'de ';   // d'abril, d'agost, d'octubre
+  return `${Number(m[3])} ${de}${mes} de ${m[1]}`;
+}
+
+function todayISO() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 // La marca (Tamiya, Heller…) és l'última paraula del títol quan no és una escala.
@@ -259,22 +415,68 @@ function brandOf(title) {
   return /^\d/.test(last) || last.includes('/') ? '' : last;
 }
 
+// Extreu l'ID d'11 caràcters de qualsevol format d'enllaç de YouTube.
+function parseYouTubeId(input) {
+  const s = (input || '').trim();
+  if (!s) return null;
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;               // ID sol
+  const patterns = [
+    /[?&]v=([A-Za-z0-9_-]{11})/,                             // /watch?v=ID
+    /youtu\.be\/([A-Za-z0-9_-]{11})/,                        // youtu.be/ID
+    /\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]{11})/,        // /embed|shorts|live|v/ID
+  ];
+  for (const re of patterns) {
+    const m = re.exec(s);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/* ── Vídeos afegits per l'usuari (localStorage) ────────────────────────────── */
+const STORE_KEY = 'oriol_maquetes.videos.v1';
+
+function loadOwn() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+    return Array.isArray(raw)
+      ? raw.filter(v => v && typeof v.id === 'string' && typeof v.title === 'string')
+      : [];
+  } catch {
+    return [];                       // dades corruptes: comencem de zero
+  }
+}
+
+function saveOwn() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(ownVideos));
+    return true;
+  } catch {
+    toast('No s\'ha pogut desar (emmagatzematge ple o bloquejat)');
+    return false;
+  }
+}
+
+let ownVideos = loadOwn();
+
+// Els vídeos del codi sempre primer; després els afegits, del més recent al més antic.
+function allVideos() {
+  return [...VIDEOS, ...ownVideos];
+}
+
 /* ── Render ────────────────────────────────────────────────────────────────── */
 const grid   = document.getElementById('grid');
 const empty  = document.getElementById('empty');
 const count  = document.getElementById('count');
 const search = document.getElementById('search');
 
-function render(list) {
-  grid.innerHTML = '';
-  list.forEach(v => {
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-    card.setAttribute('aria-label', `Reprodueix ${v.title}`);
+function makeCard(v) {
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.dataset.id = v.id;
 
-    const brand = brandOf(v.title);
-    card.innerHTML = `
+  const brand = brandOf(v.title);
+  card.innerHTML = `
+    <button class="card-main" type="button">
       <div class="thumb-wrap">
         <img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
         <span class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
@@ -283,28 +485,58 @@ function render(list) {
         <div class="card-title"></div>
         <div class="card-meta">
           <span class="date"></span>
+          ${v.own ? '<span class="badge badge-own">Afegit</span>' : ''}
           ${brand ? '<span class="badge"></span>' : ''}
         </div>
-      </div>`;
+      </div>
+    </button>`;
 
-    card.querySelector('.card-title').textContent = v.title;
-    card.querySelector('.date').textContent = formatDate(v.date);
-    if (brand) card.querySelector('.badge').textContent = brand;
+  const main = card.querySelector('.card-main');
+  main.setAttribute('aria-label', `Reprodueix ${v.title}`);
+  card.querySelector('.card-title').textContent = v.title;
+  card.querySelector('.date').textContent = v.own ? `Afegit el ${formatDate(v.date)}` : formatDate(v.date);
+  if (brand) card.querySelector('.badge:not(.badge-own)').textContent = brand;
+  main.addEventListener('click', () => openModal(v));
 
-    card.addEventListener('click', () => openModal(v));
-    grid.appendChild(card);
-  });
-
-  empty.hidden = list.length > 0;
-  count.textContent = list.length === VIDEOS.length
-    ? `${VIDEOS.length} vídeos`
-    : `${list.length} de ${VIDEOS.length} vídeos`;
+  if (v.own) {
+    const del = document.createElement('button');
+    del.className = 'card-del';
+    del.type = 'button';
+    del.innerHTML = '&times;';
+    del.title = 'Elimina aquest vídeo';
+    del.setAttribute('aria-label', `Elimina ${v.title}`);
+    del.addEventListener('click', () => removeOwn(v));
+    card.appendChild(del);
+  }
+  return card;
 }
 
-search.addEventListener('input', () => {
+function render() {
   const q = search.value.trim().toLowerCase();
-  render(q ? VIDEOS.filter(v => v.title.toLowerCase().includes(q)) : VIDEOS);
-});
+  const all = allVideos();
+  const list = q ? all.filter(v => v.title.toLowerCase().includes(q)) : all;
+
+  grid.replaceChildren(...list.map(makeCard));
+  empty.hidden = list.length > 0;
+  count.textContent = list.length === all.length
+    ? `${all.length} vídeos`
+    : `${list.length} de ${all.length} vídeos`;
+
+  const n = ownVideos.length;
+  ownCount.textContent = n === 0
+    ? 'Encara no has afegit cap vídeo. Es desen només en aquest navegador.'
+    : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} en aquest navegador.`;
+}
+
+search.addEventListener('input', render);
+
+function removeOwn(v) {
+  if (!confirm(`Vols eliminar «${v.title}» de la galeria?`)) return;
+  ownVideos = ownVideos.filter(x => x.id !== v.id);
+  saveOwn();
+  render();
+  toast('Vídeo eliminat');
+}
 
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 const modal      = document.getElementById('modal');
@@ -315,7 +547,7 @@ const modalYt    = document.getElementById('modalYt');
 
 function openModal(v) {
   modalTitle.textContent = v.title;
-  modalDate.textContent  = formatDate(v.date);
+  modalDate.textContent  = v.own ? `Afegit el ${formatDate(v.date)}` : formatDate(v.date);
   modalYt.href = `https://www.youtube.com/watch?v=${v.id}`;
 
   const frame = document.createElement('iframe');
@@ -337,9 +569,155 @@ function closeModal() {
 
 document.getElementById('modalClose').addEventListener('click', closeModal);
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
 
-render(VIDEOS);
+/* ── Panell d'administració ────────────────────────────────────────────────── */
+const adminModal = document.getElementById('adminModal');
+const adminForm  = document.getElementById('adminForm');
+const urlInput   = document.getElementById('urlInput');
+const titleInput = document.getElementById('titleInput');
+const formMsg    = document.getElementById('formMsg');
+const addBtn     = document.getElementById('addBtn');
+const ownCount   = document.getElementById('ownCount');
+const toastEl    = document.getElementById('toast');
+
+let toastTimer;
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+function setMsg(text, kind = '') {
+  formMsg.textContent = text;
+  formMsg.className = `form-msg ${kind}`;
+}
+
+function openAdmin() {
+  adminModal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  setMsg('');
+  urlInput.focus();
+}
+
+function closeAdmin() {
+  adminModal.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('fab').addEventListener('click', openAdmin);
+document.getElementById('adminClose').addEventListener('click', closeAdmin);
+adminModal.addEventListener('click', e => { if (e.target === adminModal) closeAdmin(); });
+
+// Demana el títol real del vídeo a l'API oEmbed de YouTube (permet CORS).
+async function fetchTitle(id) {
+  const url = `https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}&format=json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('oembed ' + res.status);
+  const data = await res.json();
+  if (!data.title) throw new Error('sense títol');
+  return data.title;
+}
+
+adminForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  setMsg('');
+
+  const id = parseYouTubeId(urlInput.value);
+  if (!id) {
+    setMsg('No he sabut trobar l\'ID del vídeo en aquesta adreça.', 'error');
+    urlInput.focus();
+    return;
+  }
+  if (allVideos().some(v => v.id === id)) {
+    setMsg('Aquest vídeo ja és a la galeria.', 'error');
+    return;
+  }
+
+  let title = titleInput.value.trim();
+  addBtn.disabled = true;
+  if (!title) {
+    setMsg('Consultant el títol a YouTube…');
+    try {
+      title = await fetchTitle(id);
+    } catch {
+      title = `Vídeo ${id}`;
+      setMsg('No he pogut llegir el títol de YouTube; l\'he deixat provisional.', 'error');
+    }
+  }
+
+  ownVideos.push({ id, title, date: todayISO(), own: true });
+  saveOwn();
+  addBtn.disabled = false;
+
+  render();
+  adminForm.reset();
+  if (!formMsg.classList.contains('error')) setMsg('Vídeo afegit a la galeria.', 'ok');
+  urlInput.focus();
+  toast(`Afegit: ${title}`);
+
+  // Porta la targeta nova a la vista i marca-la un moment.
+  const card = grid.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('flash');
+    setTimeout(() => card.classList.remove('flash'), 1500);
+  }
+});
+
+/* ── Exportació de la llista ───────────────────────────────────────────────── */
+const exportModal = document.getElementById('exportModal');
+const exportText  = document.getElementById('exportText');
+
+// Genera el codi de la constant VIDEOS amb les columnes alineades, com al fitxer.
+function buildExport() {
+  const rows = allVideos().map(v => ({
+    id: v.id,
+    title: v.title.replace(/\\/g, '\\\\').replace(/'/g, "\\'"),
+    date: v.date,
+  }));
+  const width = Math.max(0, ...rows.map(r => r.title.length));
+  const lines = rows.map(r =>
+    `  { id: '${r.id}', title: '${r.title}',${' '.repeat(width - r.title.length)} date: '${r.date}' },`
+  );
+  return `const VIDEOS = [\n${lines.join('\n')}\n];`;
+}
+
+function openExport() {
+  exportText.value = buildExport();
+  exportModal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeExport() {
+  exportModal.classList.remove('open');
+  document.body.style.overflow = adminModal.classList.contains('open') ? 'hidden' : '';
+}
+
+document.getElementById('exportBtn').addEventListener('click', openExport);
+document.getElementById('exportClose').addEventListener('click', closeExport);
+document.getElementById('exportBack').addEventListener('click', closeExport);
+exportModal.addEventListener('click', e => { if (e.target === exportModal) closeExport(); });
+
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(exportText.value);
+    toast('Llista copiada al porta-retalls');
+  } catch {
+    exportText.select();                 // sense permís de porta-retalls: seleccionem el text
+    toast('Selecciona i copia amb Ctrl+C');
+  }
+});
+
+// Esc tanca el diàleg de dalt de tot.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (exportModal.classList.contains('open')) closeExport();
+  else if (adminModal.classList.contains('open')) closeAdmin();
+  else if (modal.classList.contains('open')) closeModal();
+});
+
+render();
 </script>
 
 </body>
