@@ -226,21 +226,6 @@ h1 .dot { color: var(--accent); }
 }
 .admin-foot .note { font-size: 0.72rem; color: var(--text-secondary); flex: 1; min-width: 160px; line-height: 1.45; }
 
-/* ── Exportació ────────────────────────────────────────────────────────────── */
-.export-box { max-width: 680px; }
-.export-body { padding: 1rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
-.export-body p { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
-.export-body code { background: var(--bg-secondary); padding: 0.1rem 0.3rem; border-radius: 4px; color: var(--text-primary); }
-#exportText {
-  width: 100%; height: 260px; resize: vertical;
-  background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary);
-  border-radius: 9px; padding: 0.85rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.76rem; line-height: 1.6; white-space: pre; outline: none;
-}
-#exportText:focus { border-color: var(--border-accent); }
-.export-actions { display: flex; gap: 0.5rem; }
-
 /* ── Toast ─────────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(1rem);
@@ -267,8 +252,7 @@ footer a:hover { text-decoration: underline; }
   .btn { flex: 1; text-align: center; }
   .fab { bottom: 1rem; right: 1rem; width: 52px; height: 52px; }
   .toast { bottom: 5rem; width: calc(100% - 2rem); text-align: center; }
-  .admin-box, .export-box { min-height: 100%; }
-  .export-actions .btn { flex: 1; }
+  .admin-box { min-height: 100%; }
 }
 @media (max-width: 380px) {
   .grid { grid-template-columns: 1fr; }
@@ -343,25 +327,6 @@ footer a:hover { text-decoration: underline; }
     </form>
     <div class="admin-foot">
       <span class="note" id="ownCount"></span>
-      <button class="btn" id="exportBtn" type="button">Exportar llista</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Exportació ────────────────────────────────────────────────────────────── -->
-<div class="modal" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
-  <div class="modal-box export-box">
-    <div class="admin-head">
-      <h2 id="exportTitle">Exportar la llista</h2>
-      <button class="admin-close" id="exportClose" type="button" aria-label="Tanca">&times;</button>
-    </div>
-    <div class="export-body">
-      <p>Els vídeos afegits des d'aquí només es veuen en aquest navegador. Per fer-los permanents per a tothom, substitueix la constant <code>VIDEOS</code> de l'<code>index.html</code> per aquest text i puja el canvi.</p>
-      <textarea id="exportText" readonly spellcheck="false"></textarea>
-      <div class="export-actions">
-        <button class="btn btn-primary" id="copyBtn" type="button">Copia al porta-retalls</button>
-        <button class="btn" id="exportBack" type="button">Tanca</button>
-      </div>
     </div>
   </div>
 </div>
@@ -376,6 +341,9 @@ footer a:hover { text-decoration: underline; }
      title → títol que es mostra a la targeta
      date  → data en format AAAA-MM-DD
    L'ordre de la llista és l'ordre en què surten a la galeria.
+
+   Els vídeos afegits amb el botó «+» no van aquí: es desen al Worker de
+   Cloudflare i surten darrere d'aquesta llista, per a tothom qui obri la pàgina.
    ───────────────────────────────────────────────────────────────────────────── */
 const VIDEOS = [
   { id: '1yf1jg6j8Dw', title: 'BMW Z3 1995 1/24 Tamiya',              date: '2026-08-13' },
@@ -402,12 +370,6 @@ function formatDate(iso) {
   return `${Number(m[3])} ${de}${mes} de ${m[1]}`;
 }
 
-function todayISO() {
-  const d = new Date();
-  const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 // La marca (Tamiya, Heller…) és l'última paraula del títol quan no és una escala.
 function brandOf(title) {
   const parts = title.trim().split(/\s+/);
@@ -432,33 +394,52 @@ function parseYouTubeId(input) {
   return null;
 }
 
-/* ── Vídeos afegits per l'usuari (localStorage) ────────────────────────────── */
-const STORE_KEY = 'oriol_maquetes.videos.v1';
+/* ── Vídeos afegits al Worker (Cloudflare KV) ──────────────────────────────── */
+const API = 'https://oriol-maquetes.oscarbellosido.workers.dev/';
+const SECRET_KEY = 'oriol_maquetes.admin_secret';
 
-function loadOwn() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
-    return Array.isArray(raw)
-      ? raw.filter(v => v && typeof v.id === 'string' && typeof v.title === 'string')
-      : [];
-  } catch {
-    return [];                       // dades corruptes: comencem de zero
+let ownVideos = [];                  // els que venen del Worker
+let loading = true;
+
+// La contrasenya es demana un cop i es desa en aquest navegador.
+// Si el servidor la rebutja (401) s'esborra i es torna a demanar la vegada següent.
+function getSecret() {
+  let s = '';
+  try { s = localStorage.getItem(SECRET_KEY) || ''; } catch {}
+  if (!s) {
+    s = (prompt('Contrasenya d\'administrador:') || '').trim();
+    if (!s) return null;
+    try { localStorage.setItem(SECRET_KEY, s); } catch {}
   }
+  return s;
 }
 
-function saveOwn() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(ownVideos));
-    return true;
-  } catch {
-    toast('No s\'ha pogut desar (emmagatzematge ple o bloquejat)');
-    return false;
-  }
+function forgetSecret() {
+  try { localStorage.removeItem(SECRET_KEY); } catch {}
 }
 
-let ownVideos = loadOwn();
+async function api(path, options = {}) {
+  const res = await fetch(API + path, { cache: 'no-store', ...options });
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 401) forgetSecret();       // secret dolent: el tornarem a demanar
+    const err = new Error((data && data.error) || `Error ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
 
-// Els vídeos del codi sempre primer; després els afegits, del més recent al més antic.
+async function fetchRemote() {
+  const data = await api('?action=list');
+  const known = new Set(VIDEOS.map(v => v.id));
+  return (Array.isArray(data) ? data : [])
+    .filter(v => v && typeof v.id === 'string' && !known.has(v.id))
+    .map(v => ({ id: v.id, title: String(v.title || ''), date: v.date_added || '', own: true }));
+}
+
+// Els vídeos del codi sempre primer; després els del Worker.
 function allVideos() {
   return [...VIDEOS, ...ownVideos];
 }
@@ -518,24 +499,50 @@ function render() {
 
   grid.replaceChildren(...list.map(makeCard));
   empty.hidden = list.length > 0;
-  count.textContent = list.length === all.length
-    ? `${all.length} vídeos`
-    : `${list.length} de ${all.length} vídeos`;
+  count.textContent = loading
+    ? 'Carregant…'
+    : list.length === all.length
+      ? `${all.length} vídeos`
+      : `${list.length} de ${all.length} vídeos`;
 
   const n = ownVideos.length;
   ownCount.textContent = n === 0
-    ? 'Encara no has afegit cap vídeo. Es desen només en aquest navegador.'
-    : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} en aquest navegador.`;
+    ? 'Encara no s\'ha afegit cap vídeo des d\'aquí. Es desen al servidor i els veu tothom.'
+    : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} des d'aquí. Es veuen a tot arreu.`;
 }
 
 search.addEventListener('input', render);
 
-function removeOwn(v) {
-  if (!confirm(`Vols eliminar «${v.title}» de la galeria?`)) return;
-  ownVideos = ownVideos.filter(x => x.id !== v.id);
-  saveOwn();
-  render();
-  toast('Vídeo eliminat');
+// Carrega la llista del Worker i refresca la galeria.
+async function refresh() {
+  try {
+    ownVideos = await fetchRemote();
+  } catch (err) {
+    toast('No s\'ha pogut carregar la llista del servidor');
+    console.error(err);
+  } finally {
+    loading = false;
+    render();
+  }
+}
+
+async function removeOwn(v) {
+  if (!confirm(`Vols eliminar «${v.title}» de la galeria? S'esborrarà per a tothom.`)) return;
+
+  const secret = getSecret();
+  if (!secret) return;
+
+  try {
+    await api(`?action=remove&id=${encodeURIComponent(v.id)}`, {
+      method: 'DELETE',
+      headers: { 'X-Admin-Secret': secret },
+    });
+    ownVideos = ownVideos.filter(x => x.id !== v.id);
+    render();
+    toast('Vídeo eliminat');
+  } catch (err) {
+    toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut eliminar: ${err.message}`);
+  }
 }
 
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
@@ -634,6 +641,12 @@ adminForm.addEventListener('submit', async e => {
     return;
   }
 
+  const secret = getSecret();
+  if (!secret) {
+    setMsg('Cal la contrasenya d\'administrador per afegir vídeos.', 'error');
+    return;
+  }
+
   let title = titleInput.value.trim();
   addBtn.disabled = true;
   if (!title) {
@@ -642,19 +655,30 @@ adminForm.addEventListener('submit', async e => {
       title = await fetchTitle(id);
     } catch {
       title = `Vídeo ${id}`;
-      setMsg('No he pogut llegir el títol de YouTube; l\'he deixat provisional.', 'error');
     }
   }
 
-  ownVideos.push({ id, title, date: todayISO(), own: true });
-  saveOwn();
+  setMsg('Desant al servidor…');
+  let video;
+  try {
+    ({ video } = await api('?action=add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+      body: JSON.stringify({ id, title }),
+    }));
+  } catch (err) {
+    addBtn.disabled = false;
+    setMsg(err.status === 401 ? 'Contrasenya incorrecta.' : `No s'ha pogut desar: ${err.message}`, 'error');
+    return;
+  }
   addBtn.disabled = false;
 
+  ownVideos.push({ id: video.id, title: video.title, date: video.date_added, own: true });
   render();
   adminForm.reset();
-  if (!formMsg.classList.contains('error')) setMsg('Vídeo afegit a la galeria.', 'ok');
+  setMsg('Vídeo afegit a la galeria.', 'ok');
   urlInput.focus();
-  toast(`Afegit: ${title}`);
+  toast(`Afegit: ${video.title}`);
 
   // Porta la targeta nova a la vista i marca-la un moment.
   const card = grid.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
@@ -665,59 +689,15 @@ adminForm.addEventListener('submit', async e => {
   }
 });
 
-/* ── Exportació de la llista ───────────────────────────────────────────────── */
-const exportModal = document.getElementById('exportModal');
-const exportText  = document.getElementById('exportText');
-
-// Genera el codi de la constant VIDEOS amb les columnes alineades, com al fitxer.
-function buildExport() {
-  const rows = allVideos().map(v => ({
-    id: v.id,
-    title: v.title.replace(/\\/g, '\\\\').replace(/'/g, "\\'"),
-    date: v.date,
-  }));
-  const width = Math.max(0, ...rows.map(r => r.title.length));
-  const lines = rows.map(r =>
-    `  { id: '${r.id}', title: '${r.title}',${' '.repeat(width - r.title.length)} date: '${r.date}' },`
-  );
-  return `const VIDEOS = [\n${lines.join('\n')}\n];`;
-}
-
-function openExport() {
-  exportText.value = buildExport();
-  exportModal.classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeExport() {
-  exportModal.classList.remove('open');
-  document.body.style.overflow = adminModal.classList.contains('open') ? 'hidden' : '';
-}
-
-document.getElementById('exportBtn').addEventListener('click', openExport);
-document.getElementById('exportClose').addEventListener('click', closeExport);
-document.getElementById('exportBack').addEventListener('click', closeExport);
-exportModal.addEventListener('click', e => { if (e.target === exportModal) closeExport(); });
-
-document.getElementById('copyBtn').addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(exportText.value);
-    toast('Llista copiada al porta-retalls');
-  } catch {
-    exportText.select();                 // sense permís de porta-retalls: seleccionem el text
-    toast('Selecciona i copia amb Ctrl+C');
-  }
-});
-
 // Esc tanca el diàleg de dalt de tot.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (exportModal.classList.contains('open')) closeExport();
-  else if (adminModal.classList.contains('open')) closeAdmin();
+  if (adminModal.classList.contains('open')) closeAdmin();
   else if (modal.classList.contains('open')) closeModal();
 });
 
 render();
+refresh();
 </script>
 
 </body>

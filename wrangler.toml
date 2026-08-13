@@ -1,0 +1,8 @@
+name = "oriol-maquetes"
+main = "worker.js"
+compatibility_date = "2026-08-13"
+
+# L'ID el dona `npx wrangler kv namespace create VIDEOS_KV`.
+[[kv_namespaces]]
+binding = "VIDEOS_KV"
+id = "7d03921d3e44491782f0f4bb6fae034b"
