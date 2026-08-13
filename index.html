@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maquetes — Galeria de vídeos</title>
+<meta name="theme-color" content="#12121a">
+<meta name="description" content="Galeria de vídeos de maquetes de cotxes a escala 1/24 del canal @maquetes-f1n.">
+<style>
+/* ── Variables ─────────────────────────────────────────────────────────────── */
+:root {
+  --bg-primary:   #12121a;
+  --bg-secondary: #1a1a26;
+  --bg-card:      #1e1e2d;
+  --bg-card-hover:#26263a;
+  --text-primary: #e8e8f0;
+  --text-secondary:#9a9ab0;
+  --accent:       #ff5c3d;
+  --accent-soft:  rgba(255,92,61,0.14);
+  --border:       rgba(255,255,255,0.07);
+  --border-accent:rgba(255,92,61,0.45);
+  --shadow:       rgba(0,0,0,0.45);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  padding: 2.5rem 1.25rem 4rem;
+  -webkit-font-smoothing: antialiased;
+}
+.container { max-width: 1180px; margin: 0 auto; }
+
+/* ── Capçalera ─────────────────────────────────────────────────────────────── */
+header { margin-bottom: 2rem; }
+.brand { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+h1 { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; }
+h1 .dot { color: var(--accent); }
+.channel-link {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--border-accent);
+  padding: 0.35rem 0.75rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; text-decoration: none;
+  transition: background 0.2s, transform 0.15s;
+}
+.channel-link:hover { background: rgba(255,92,61,0.24); transform: translateY(-1px); }
+.subtitle { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.55; max-width: 60ch; }
+
+/* ── Barra d'eines ─────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+  margin: 1.75rem 0 1.5rem;
+  padding-bottom: 1.25rem; border-bottom: 1px solid var(--border);
+}
+.search {
+  flex: 1; min-width: 220px;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 0.7rem 1rem; border-radius: 10px;
+  font-size: 0.9rem; font-family: inherit; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.search:focus { border-color: var(--border-accent); background: var(--bg-card); }
+.search::placeholder { color: var(--text-secondary); }
+.count { color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap; }
+
+/* ── Graella ───────────────────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  cursor: pointer;
+  text-align: left;
+  font: inherit; color: inherit;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.card:hover, .card:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+  box-shadow: 0 10px 28px var(--shadow);
+  outline: none;
+}
+.thumb-wrap { position: relative; aspect-ratio: 16 / 9; background: var(--bg-secondary); overflow: hidden; }
+.thumb { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease; }
+.card:hover .thumb { transform: scale(1.045); }
+.play {
+  position: absolute; inset: 0; margin: auto;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(18,18,26,0.72);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  display: grid; place-items: center;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  backdrop-filter: blur(3px);
+}
+.play svg { width: 20px; height: 20px; fill: #fff; margin-left: 3px; }
+.card:hover .play { background: var(--accent); border-color: var(--accent); transform: scale(1.08); }
+
+.card-body { padding: 0.9rem 1rem 1.05rem; display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
+.card-title { font-size: 0.98rem; font-weight: 600; line-height: 1.35; }
+.card-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; }
+.date { color: var(--text-secondary); font-size: 0.76rem; }
+.badge {
+  margin-left: auto;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 6px; padding: 0.15rem 0.45rem;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+}
+
+.empty { color: var(--text-secondary); text-align: center; padding: 3rem 1rem; font-size: 0.92rem; }
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+.modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(8,8,12,0.88);
+  backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+  padding: 1.25rem;
+}
+.modal.open { display: flex; animation: fade 0.18s ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.modal-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%; max-width: 980px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+.player { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.modal-bar { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1.1rem; }
+.modal-info { min-width: 0; }
+.modal-title { font-size: 1rem; font-weight: 600; line-height: 1.35; }
+.modal-date { color: var(--text-secondary); font-size: 0.76rem; margin-top: 0.15rem; }
+.modal-actions { margin-left: auto; display: flex; gap: 0.5rem; flex-shrink: 0; }
+.btn {
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.5rem 0.85rem; font-size: 0.8rem; font-family: inherit; font-weight: 600;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.btn:hover { background: var(--bg-card-hover); color: var(--text-primary); border-color: var(--border-accent); }
+.btn-close { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-close:hover { background: #ff7357; color: #fff; border-color: #ff7357; }
+
+footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.78rem; text-align: center; }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ── Mòbil ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  body { padding: 1.5rem 0.9rem 3rem; }
+  h1 { font-size: 1.45rem; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+  .modal { padding: 0; align-items: flex-start; }
+  .modal-box { border-radius: 0; max-width: 100%; margin-top: 0; }
+  .modal-bar { flex-wrap: wrap; }
+  .modal-actions { width: 100%; margin-left: 0; }
+  .btn { flex: 1; text-align: center; }
+}
+@media (max-width: 380px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="brand">
+      <h1>Maquetes<span class="dot">.</span></h1>
+      <a class="channel-link" href="https://youtube.com/@maquetes-f1n" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
+        @maquetes-f1n
+      </a>
+    </div>
+    <p class="subtitle">Galeria de maquetes de cotxes a escala 1/24. Fes clic a qualsevol targeta per veure el vídeo sense sortir de la pàgina.</p>
+  </header>
+
+  <div class="toolbar">
+    <input type="text" class="search" id="search" placeholder="Cerca per títol… (p. ex. Tamiya, Porsche, Heller)" autocomplete="off">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>Cap vídeo coincideix amb la cerca.</p>
+
+  <footer>
+    Canal <a href="https://youtube.com/@maquetes-f1n" target="_blank" rel="noopener">@maquetes-f1n</a> · Galeria feta amb un sol fitxer HTML
+  </footer>
+</div>
+
+<!-- ── Modal ─────────────────────────────────────────────────────────────────── -->
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="player" id="player"></div>
+    <div class="modal-bar">
+      <div class="modal-info">
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-date" id="modalDate"></div>
+      </div>
+      <div class="modal-actions">
+        <a class="btn" id="modalYt" href="#" target="_blank" rel="noopener">Obre a YouTube</a>
+        <button class="btn btn-close" id="modalClose" type="button">Tanca</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   LLISTA DE VÍDEOS
+   Per afegir-ne un de nou, copia una línia i canvia les dades:
+     id    → els 11 caràcters de la URL de YouTube (…/watch?v=AQUÍ)
+     title → títol que es mostra a la targeta
+     date  → data en format AAAA-MM-DD
+   L'ordre de la llista és l'ordre en què surten a la galeria.
+   ───────────────────────────────────────────────────────────────────────────── */
+const VIDEOS = [
+  { id: '1yf1jg6j8Dw', title: 'BMW Z3 1995 1/24 Tamiya',              date: '2026-08-13' },
+  { id: '3VIr2cgXbFk', title: 'Porsche 911 Turbo 1988 1/24 Tamiya',   date: '2026-08-13' },
+  { id: '_LwCn2muOaU', title: 'Lamboghini Countach 1/24 Tamiya',      date: '2026-08-13' },
+  { id: 'XBEpDtRfcIE', title: 'BMW 320i 1/24 Hasegawa',               date: '2026-08-13' },
+  { id: '2q9VWJHzaYM', title: 'Golf GTI MK1 1/24 Revell',             date: '2026-08-13' },
+  { id: 'UAea33DIDqE', title: 'VW Beetle 1300 1/24 Tamiya',           date: '2026-08-12' },
+  { id: 'Ga02TcUpVwc', title: 'Citroën 2 CV Charleston 1/24 Heller',  date: '2026-08-12' },
+  { id: 'LqVnHyJWCQY', title: 'Renault 5 TS 1/24 Italeri',            date: '2026-08-11' },
+  { id: 'MxfSXHuynjY', title: 'Renault 4 1/24 Heller',                date: '2026-08-11' },
+  { id: 'dIB0ECVYUpg', title: 'Citroën Mehari 1/24 Heller',           date: '2026-08-10' },
+  { id: 'JjDYHgQCrIc', title: 'Fit 600 1/24 Gunze Sangyo',            date: '2026-08-10' },
+];
+
+/* ── Utilitats ─────────────────────────────────────────────────────────────── */
+const MESOS = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
+
+function formatDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return iso || '';
+  return `${Number(m[3])} de ${MESOS[Number(m[2]) - 1]} de ${m[1]}`;
+}
+
+// La marca (Tamiya, Heller…) és l'última paraula del títol quan no és una escala.
+function brandOf(title) {
+  const parts = title.trim().split(/\s+/);
+  const last = parts[parts.length - 1];
+  return /^\d/.test(last) || last.includes('/') ? '' : last;
+}
+
+/* ── Render ────────────────────────────────────────────────────────────────── */
+const grid   = document.getElementById('grid');
+const empty  = document.getElementById('empty');
+const count  = document.getElementById('count');
+const search = document.getElementById('search');
+
+function render(list) {
+  grid.innerHTML = '';
+  list.forEach(v => {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.setAttribute('aria-label', `Reprodueix ${v.title}`);
+
+    const brand = brandOf(v.title);
+    card.innerHTML = `
+      <div class="thumb-wrap">
+        <img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
+        <span class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+      </div>
+      <div class="card-body">
+        <div class="card-title"></div>
+        <div class="card-meta">
+          <span class="date"></span>
+          ${brand ? '<span class="badge"></span>' : ''}
+        </div>
+      </div>`;
+
+    card.querySelector('.card-title').textContent = v.title;
+    card.querySelector('.date').textContent = formatDate(v.date);
+    if (brand) card.querySelector('.badge').textContent = brand;
+
+    card.addEventListener('click', () => openModal(v));
+    grid.appendChild(card);
+  });
+
+  empty.hidden = list.length > 0;
+  count.textContent = list.length === VIDEOS.length
+    ? `${VIDEOS.length} vídeos`
+    : `${list.length} de ${VIDEOS.length} vídeos`;
+}
+
+search.addEventListener('input', () => {
+  const q = search.value.trim().toLowerCase();
+  render(q ? VIDEOS.filter(v => v.title.toLowerCase().includes(q)) : VIDEOS);
+});
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+const modal      = document.getElementById('modal');
+const player     = document.getElementById('player');
+const modalTitle = document.getElementById('modalTitle');
+const modalDate  = document.getElementById('modalDate');
+const modalYt    = document.getElementById('modalYt');
+
+function openModal(v) {
+  modalTitle.textContent = v.title;
+  modalDate.textContent  = formatDate(v.date);
+  modalYt.href = `https://www.youtube.com/watch?v=${v.id}`;
+
+  const frame = document.createElement('iframe');
+  frame.src = `https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&rel=0`;
+  frame.title = v.title;
+  frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+  frame.allowFullscreen = true;
+  player.replaceChildren(frame);
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  modal.classList.remove('open');
+  player.replaceChildren();          // atura la reproducció
+  document.body.style.overflow = '';
+}
+
+document.getElementById('modalClose').addEventListener('click', closeModal);
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+
+render(VIDEOS);
+</script>
+
+</body>
+</html>
