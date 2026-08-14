@@ -928,6 +928,9 @@ layoutToggle.addEventListener('click', () => {
   const next = currentLayout() === 'masonry' ? 'grid' : 'masonry';
   applyLayout(next);
   try { localStorage.setItem(LAYOUT_KEY, next); } catch {}
+  // Canviar de disposició posa o treu la nansa d'arrossegar, que només té sentit
+  // a la graella; repintar és també qui refà (o destrueix) el Sortable.
+  if (!loading) render();
 });
 
 applyLayout(currentLayout());
@@ -1116,17 +1119,24 @@ function render({ animate = false } = {}) {
 /* ── Reordenació (només administrador) ─────────────────────────────────────── */
 // Els vídeos del codi no es poden moure, i mentre hi ha una cerca a mitges la
 // graella no ensenya tota la llista: l'ordre que s'enviaria seria incomplet.
+//
+// En masonry tampoc: allà les targetes s'escampen per columnes de CSS, i l'ordre
+// que es veu (avall una columna, després la següent) no és el del DOM, que és el
+// que llegeix saveOrder(). S'hi desaria un ordre que no és el que s'ha arrossegat.
 function canReorder() {
-  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1;
+  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1
+         && currentLayout() === 'grid';
 }
 
 let sortable = null;
+let savingOrder = false;
 
 function setupSortable() {
   if (sortable) { sortable.destroy(); sortable = null; }
   if (!canReorder() || !window.Sortable) return;
 
   sortable = window.Sortable.create(grid, {
+    disabled: savingOrder,          // hi ha un ordre viatjant cap al Worker
     draggable: '.card[data-own="1"]',
     handle: '.card-grip',
     animation: 180,
@@ -1155,6 +1165,11 @@ async function saveOrder() {
   const secret = getSecret();
   if (!secret) { ownVideos = previous; render(); return; }
 
+  // Dos moviments seguits enviarien dues peticions que poden arribar
+  // desordenades al Worker, i la que fallés tornaria enrere a un ordre que ja no
+  // és el de ningú. Mentre es desa, la graella no es deixa tocar.
+  savingOrder = true;
+  sortable?.option('disabled', true);
   try {
     await api('?action=reorder', {
       method: 'POST',
@@ -1162,9 +1177,12 @@ async function saveOrder() {
       body: JSON.stringify({ ids }),
     });
     toast('Ordre desat');
+    savingOrder = false;
+    sortable?.option('disabled', false);
   } catch (err) {
     ownVideos = previous;
-    render();
+    savingOrder = false;
+    render();                  // el render refà el Sortable, ja sense bloquejar
     toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar l'ordre: ${err.message}`);
   }
 }
@@ -1302,7 +1320,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes per la nansa (⠿) per canviar-ne l\'ordre.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes per la nansa (⠿) per canviar-ne l\'ordre; això només es pot fer en mode graella (⊞), no en masonry.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
