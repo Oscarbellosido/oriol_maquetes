@@ -314,6 +314,26 @@ h1 .dot { color: var(--accent); }
 
 .card-body { padding: 1.25rem 1.3rem 1.35rem; display: flex; flex-direction: column; gap: 0.7rem; flex: 1; }
 .card-title { font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }
+/* Títol editable: només a les targetes del servidor i amb contrasenya desada.
+   El llapis apareix en passar-hi el cursor, per dir que s'hi pot fer doble clic. */
+.card-title.editable { cursor: text; }
+.card-title.editable::after {
+  content: ' ✏️';
+  font-size: 0.82em;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.card-title.editable:hover::after { opacity: 0.9; }
+.card-title.editing::after { content: none; }
+.title-input {
+  display: block; width: 100%;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-accent); border-radius: var(--r-sm);
+  padding: 0.3rem 0.5rem;
+  font: inherit; outline: none;
+  transition: box-shadow 0.22s var(--ease);
+}
+.title-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .card-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; }
 .date { color: var(--text-dim); font-size: 0.76rem; }
 .badge {
@@ -954,8 +974,10 @@ function makeCard(v, i, animate) {
   const fresh = isNew(v.date);
   if (fresh) card.classList.add('has-new');
 
+  // Div amb role="button" i no pas <button>: en mode administrador el títol es
+  // converteix en un <input>, i un botó no pot contenir res interactiu.
   card.innerHTML = `
-    <button class="card-main" type="button">
+    <div class="card-main" role="button" tabindex="0">
       <div class="thumb-wrap">
         <img class="thumb" loading="lazy" alt="" draggable="false" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
         <span class="thumb-hit" aria-hidden="true"></span>
@@ -970,14 +992,35 @@ function makeCard(v, i, animate) {
           ${brand ? '<span class="badge"></span>' : ''}
         </div>
       </div>
-    </button>`;
+    </div>`;
 
   const main = card.querySelector('.card-main');
   main.setAttribute('aria-label', `Reprodueix ${v.title}`);
-  card.querySelector('.card-title').textContent = v.title;
+  const title = card.querySelector('.card-title');
+  title.textContent = v.title;
   card.querySelector('.date').textContent = v.own ? `Afegit el ${formatDate(v.date)}` : formatDate(v.date);
   if (brand) card.querySelector('.badge:not(.badge-own)').textContent = brand;
   main.addEventListener('click', () => openModal(v));
+  // El div no és un botó de debò: el teclat l'ha d'obrir a mà.
+  main.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    openModal(v);
+  });
+
+  // Els vídeos del servidor es poden reanomenar des de la mateixa targeta.
+  if (v.own && hasSecret()) {
+    title.classList.add('editable');
+    title.title = 'Doble clic per canviar el títol';
+    // Un sol clic damunt del títol no ha d'obrir el vídeo: el primer del doble
+    // clic ens deixaria el modal al davant.
+    title.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+    title.addEventListener('dblclick', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      editTitle(card, v);
+    });
+  }
 
   const actions = document.createElement('div');
   actions.className = 'card-actions';
@@ -1295,6 +1338,84 @@ async function removeOwn(v) {
   }
 }
 
+/* ── Edició del títol (només administrador) ────────────────────────────────── */
+// El títol es canvia per un <input> al mateix lloc. Enter i sortir-ne el desen;
+// la tecla d'escapada ho deixa córrer. Res de modals: el text es queda on és.
+function editTitle(card, v) {
+  const titleEl = card.querySelector('.card-title');
+  if (!titleEl || titleEl.classList.contains('editing')) return;
+
+  const before = v.title;
+  titleEl.classList.add('editing');
+  titleEl.textContent = '';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'title-input';
+  input.value = before;
+  input.maxLength = 200;
+  input.setAttribute('aria-label', 'Títol del vídeo');
+  titleEl.appendChild(input);
+
+  // Amb la targeta arrossegable, seleccionar text amb el ratolí arrencaria el
+  // gest de reordenar; mentre s'edita, la targeta no es mou.
+  const wasDraggable = card.draggable;
+  card.draggable = false;
+
+  input.focus();
+  input.select();
+
+  let closed = false;
+  function finish(save) {
+    if (closed) return;
+    closed = true;
+    card.draggable = wasDraggable;
+    titleEl.classList.remove('editing');
+
+    const next = input.value.trim();
+    if (!save || !next || next === before) {
+      titleEl.textContent = before;
+      return;
+    }
+    titleEl.textContent = next;          // es veu de seguida; si falla, es desfà
+    saveTitle(v, next, before);
+  }
+
+  // Les tecles no han de sortir de l'input: fora hi ha l'Enter que obre el
+  // vídeo, l'escapada que tanca els diàlegs i les fletxes del reproductor.
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter')       { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+async function saveTitle(v, title, before) {
+  const secret = getSecret();
+  if (!secret) { render(); return; }
+
+  v.title = title;                       // `v` és el mateix objecte d'ownVideos
+  render();
+  if (currentVideo && currentVideo.id === v.id) modalTitle.textContent = title;
+
+  try {
+    await api('?action=update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+      body: JSON.stringify({ id: v.id, title }),
+    });
+    toast('Títol desat');
+  } catch (err) {
+    v.title = before;
+    render();
+    if (currentVideo && currentVideo.id === v.id) modalTitle.textContent = before;
+    toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar el títol: ${err.message}`);
+  }
+}
+
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 const modal      = document.getElementById('modal');
 const player     = document.getElementById('player');
@@ -1394,7 +1515,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir; això només es pot fer en mode graella (⊞), no en masonry.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir; això només es pot fer en mode graella (⊞), no en masonry. Fes doble clic al títol (✏️) per canviar-lo.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
