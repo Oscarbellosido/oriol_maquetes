@@ -398,6 +398,9 @@ h1 .dot { color: var(--accent); }
   border-color: var(--border-accent);
   box-shadow: var(--shadow-xl);
 }
+/* La targeta que segueix el cursor és un clon que penja del <body>: no ha de
+   robar cap esdeveniment a la graella que té a sota. */
+.card-fallback { pointer-events: none; opacity: 0.92; cursor: grabbing; }
 
 /* Mentre s'espera la llista del servidor. */
 .loader {
@@ -1030,6 +1033,7 @@ function attachPreview(card, v) {
   const wrap = card.querySelector('.thumb-wrap');
 
   card.addEventListener('mouseenter', () => {
+    if (dragging) return;                      // s'estan reordenant les targetes
     if (wrap.querySelector('.thumb-preview')) return;
     const frame = document.createElement('iframe');
     frame.className = 'thumb-preview';
@@ -1123,13 +1127,16 @@ function render({ animate = false } = {}) {
 // En masonry tampoc: allà les targetes s'escampen per columnes de CSS, i l'ordre
 // que es veu (avall una columna, després la següent) no és el del DOM, que és el
 // que llegeix saveOrder(). S'hi desaria un ordre que no és el que s'ha arrossegat.
+// I si el CDN de Sortable no ha arribat, tampoc: la nansa es dibuixava igualment
+// i es veia una cosa que no es podia arrossegar.
 function canReorder() {
   return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1
-         && currentLayout() === 'grid';
+         && currentLayout() === 'grid' && !!window.Sortable;
 }
 
 let sortable = null;
 let savingOrder = false;
+let dragging = false;
 
 function setupSortable() {
   if (sortable) { sortable.destroy(); sortable = null; }
@@ -1143,11 +1150,25 @@ function setupSortable() {
     ghostClass: 'card-ghost',
     chosenClass: 'card-chosen',
     dragClass: 'card-drag',
+    // L'arrossegament natiu d'HTML5 no serveix aquí: la galeria s'omple
+    // d'iframes de YouTube (la previsualització del cursor) i, quan el punter
+    // n'entra un, el navegador se'n porta el gest cap a dins de l'iframe i el
+    // moviment es perd. En mode «fallback» Sortable es fa ell mateix el gest
+    // amb esdeveniments de punter i això ja no passa.
+    forceFallback: true,
+    fallbackClass: 'card-fallback',
+    fallbackTolerance: 4,           // un clic amb el pols tremolós no és un drag
     // Res no pot passar per davant o per darrere d'una targeta del codi.
     onMove: evt => !!evt.related && evt.related.dataset.own === '1',
+    // Cap previsualització mentre s'arrossega: si no, cada targeta que el punter
+    // travessa engega un vídeo just a sota del cursor.
+    onStart: () => { dragging = true; stopAllPreviews(); },
     // Fora del gest: si falla, saveOrder() repinta, i amb això destruiria el
     // Sortable que ara mateix encara està acabant el «drop».
-    onEnd: evt => { if (evt.oldIndex !== evt.newIndex) setTimeout(saveOrder, 0); },
+    onEnd: evt => {
+      dragging = false;
+      if (evt.oldIndex !== evt.newIndex) setTimeout(saveOrder, 0);
+    },
   });
 }
 
