@@ -389,18 +389,19 @@ h1 .dot { color: var(--accent); }
 .card-grip:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 .card-grip:active { cursor: grabbing; }
 
-/* Estats d'arrossegament (SortableJS). */
-.card-ghost { opacity: 0.35; }
-.card-ghost .thumb { filter: grayscale(1); }
-.card-chosen { cursor: grabbing; }
-.card-drag {
-  transform: none;                       /* mana la posició que li dona Sortable */
-  border-color: var(--border-accent);
-  box-shadow: var(--shadow-xl);
+/* Estats d'arrossegament. La que s'està movent s'esvaeix al seu lloc, i la que
+   té el punter a sobre ensenya una barra al costat per on hi caurà. */
+.card.dragging { opacity: 0.35; }
+.card.dragging .thumb { filter: grayscale(1); }
+.card.drag-over { border-color: var(--border-accent); }
+/* La barra va per dins de la vora: la targeta retalla el que en surt. */
+.card.drag-over::after {
+  content: ''; position: absolute; z-index: 6;
+  top: 0; bottom: 0; left: 0; width: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
-/* La targeta que segueix el cursor és un clon que penja del <body>: no ha de
-   robar cap esdeveniment a la graella que té a sota. */
-.card-fallback { pointer-events: none; opacity: 0.92; cursor: grabbing; }
+.card.drag-over.drop-after::after { left: auto; right: 0; }
 
 /* Mentre s'espera la llista del servidor. */
 .loader {
@@ -708,10 +709,6 @@ footer a:hover { text-decoration: underline; }
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<!-- Per arrossegar les targetes. Si el CDN falla, la galeria funciona igual:
-     simplement no es poden reordenar. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    LLISTA DE VÍDEOS
@@ -931,9 +928,6 @@ layoutToggle.addEventListener('click', () => {
   const next = currentLayout() === 'masonry' ? 'grid' : 'masonry';
   applyLayout(next);
   try { localStorage.setItem(LAYOUT_KEY, next); } catch {}
-  // Canviar de disposició posa o treu la nansa d'arrossegar, que només té sentit
-  // a la graella; repintar és també qui refà (o destrueix) el Sortable.
-  if (!loading) render();
 });
 
 applyLayout(currentLayout());
@@ -950,7 +944,7 @@ function makeCard(v, i, animate) {
   const card = document.createElement('article');
   card.className = animate ? 'card in' : 'card';
   card.dataset.id = v.id;
-  if (v.own) card.dataset.own = '1';                 // el selector que fa servir Sortable
+  if (v.own) card.dataset.own = '1';                 // les del servidor es poden moure
   if (animate) card.style.setProperty('--i', i);
 
   const brand = brandOf(v.title);
@@ -960,7 +954,7 @@ function makeCard(v, i, animate) {
   card.innerHTML = `
     <button class="card-main" type="button">
       <div class="thumb-wrap">
-        <img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
+        <img class="thumb" loading="lazy" alt="" draggable="false" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
         <span class="thumb-hit" aria-hidden="true"></span>
         <span class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
         ${fresh ? '<span class="badge-new">NOU</span>' : ''}
@@ -1012,6 +1006,7 @@ function makeCard(v, i, animate) {
   card.appendChild(actions);
 
   if (v.own && canReorder()) {
+    card.draggable = true;
     const grip = document.createElement('span');
     grip.className = 'card-grip';
     grip.textContent = '⠿';
@@ -1116,95 +1111,144 @@ function render({ animate = false } = {}) {
     ? 'Encara no s\'ha afegit cap vídeo des d\'aquí. Es desen al servidor i els veu tothom.'
     : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} des d'aquí. Es veuen a tot arreu.`;
 
-  setupSortable();
   updateModalNav();          // si la cerca ha canviat, els extrems també
 }
 
 /* ── Reordenació (només administrador) ─────────────────────────────────────── */
+// Arrossegar i deixar anar del navegador, sense cap llibreria. La targeta que
+// s'arrossega es recorda per l'id, i en deixar-la anar es reordena la llista
+// `ownVideos` —no el DOM— i es repinta: així l'ordre que es desa és sempre el
+// de les dades, i tant se val com les hagi col·locades la graella o el masonry.
+//
 // Els vídeos del codi no es poden moure, i mentre hi ha una cerca a mitges la
 // graella no ensenya tota la llista: l'ordre que s'enviaria seria incomplet.
-//
-// En masonry tampoc: allà les targetes s'escampen per columnes de CSS, i l'ordre
-// que es veu (avall una columna, després la següent) no és el del DOM, que és el
-// que llegeix saveOrder(). S'hi desaria un ordre que no és el que s'ha arrossegat.
-// I si el CDN de Sortable no ha arribat, tampoc: la nansa es dibuixava igualment
-// i es veia una cosa que no es podia arrossegar.
 function canReorder() {
-  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1
-         && currentLayout() === 'grid' && !!window.Sortable;
+  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1;
 }
 
-let sortable = null;
 let savingOrder = false;
-let dragging = false;
+let dragging = false;       // hi ha un gest a mig fer: cap previsualització
+let dragId = null;          // id de la targeta que s'arrossega
+let dropTarget = null;      // targeta assenyalada ara mateix, i per quin costat
+let dropAfter = false;
 
-function setupSortable() {
-  if (sortable) { sortable.destroy(); sortable = null; }
-  if (!canReorder() || !window.Sortable) return;
-
-  sortable = window.Sortable.create(grid, {
-    disabled: savingOrder,          // hi ha un ordre viatjant cap al Worker
-    draggable: '.card[data-own="1"]',
-    handle: '.card-grip',
-    animation: 180,
-    ghostClass: 'card-ghost',
-    chosenClass: 'card-chosen',
-    dragClass: 'card-drag',
-    // L'arrossegament natiu d'HTML5 no serveix aquí: la galeria s'omple
-    // d'iframes de YouTube (la previsualització del cursor) i, quan el punter
-    // n'entra un, el navegador se'n porta el gest cap a dins de l'iframe i el
-    // moviment es perd. En mode «fallback» Sortable es fa ell mateix el gest
-    // amb esdeveniments de punter i això ja no passa.
-    forceFallback: true,
-    fallbackClass: 'card-fallback',
-    fallbackTolerance: 4,           // un clic amb el pols tremolós no és un drag
-    // Res no pot passar per davant o per darrere d'una targeta del codi.
-    onMove: evt => !!evt.related && evt.related.dataset.own === '1',
-    // Cap previsualització mentre s'arrossega: si no, cada targeta que el punter
-    // travessa engega un vídeo just a sota del cursor.
-    onStart: () => { dragging = true; stopAllPreviews(); },
-    // Fora del gest: si falla, saveOrder() repinta, i amb això destruiria el
-    // Sortable que ara mateix encara està acabant el «drop».
-    onEnd: evt => {
-      dragging = false;
-      if (evt.oldIndex !== evt.newIndex) setTimeout(saveOrder, 0);
-    },
-  });
+function markDrop(card, after) {
+  if (dropTarget === card && dropAfter === after) return;
+  clearDropMark();
+  dropTarget = card;
+  dropAfter = after;
+  card.classList.add('drag-over');
+  card.classList.toggle('drop-after', after);
 }
 
-// La graella ja està en l'ordre nou quan arribem aquí: només cal llegir-la i
-// desar-la. Si el servidor la rebutja, es torna enrere.
-async function saveOrder() {
-  const ids = [...grid.querySelectorAll('.card[data-own="1"]')].map(c => c.dataset.id);
+function clearDropMark() {
+  dropTarget?.classList.remove('drag-over', 'drop-after');
+  dropTarget = null;
+  dropAfter = false;
+}
+
+// La targeta arrossegable sota el punter, si no és la que estem movent.
+function dropCardFrom(evt) {
+  if (!dragId) return null;
+  const card = evt.target.closest?.('.card[data-own="1"]');
+  return card && card.dataset.id !== dragId ? card : null;
+}
+
+grid.addEventListener('dragstart', evt => {
+  const card = evt.target.closest?.('.card[data-own="1"]');
+  if (!card || !canReorder() || savingOrder) { evt.preventDefault(); return; }
+
+  dragId = card.dataset.id;
+  dragging = true;
+  stopAllPreviews();            // cap iframe de YouTube pel mig del gest
+  evt.dataTransfer.effectAllowed = 'move';
+  evt.dataTransfer.setData('text/plain', dragId);   // el Firefox no arrenca sense dades
+  // Després del tic, perquè el navegador ja hagi fet la foto que segueix el cursor.
+  setTimeout(() => card.classList.add('dragging'), 0);
+});
+
+grid.addEventListener('dragover', evt => {
+  const card = dropCardFrom(evt);
+  if (!card) return;
+  evt.preventDefault();                    // sense això no hi ha «drop»
+  evt.dataTransfer.dropEffect = 'move';
+  // Meitat esquerra, va al davant; meitat dreta, al darrere.
+  const box = card.getBoundingClientRect();
+  markDrop(card, evt.clientX > box.left + box.width / 2);
+});
+
+// El «dragleave» salta també en passar d'un fill a un altre de la mateixa
+// targeta: només compta si de debò se n'ha sortit.
+grid.addEventListener('dragleave', evt => {
+  if (dropTarget && !dropTarget.contains(evt.relatedTarget)) clearDropMark();
+});
+
+grid.addEventListener('drop', evt => {
+  const card = dropCardFrom(evt);
+  if (!card) return;
+  evt.preventDefault();
+  const id = dragId, overId = card.dataset.id, after = dropAfter;
+  // Cal tancar el gest aquí mateix, abans de moure res: el render() que ve tot
+  // seguit treu de la graella la targeta que s'arrossegava, i el «dragend» que
+  // hauria de venir després salta en un element que ja no penja d'enlloc, o
+  // sigui que no puja fins a la graella i aquest altre escoltador no el sent.
+  // Sense això `dragging` es quedaria encès i ja no hi hauria previsualitzacions.
+  endDrag();
+  moveVideo(id, overId, after);
+});
+
+// Per als gestos que no acaben en un lloc bo: amollar-la fora de la graella, o
+// deixar-ho córrer amb la tecla d'escapada.
+grid.addEventListener('dragend', endDrag);
+
+function endDrag() {
+  grid.querySelector('.card.dragging')?.classList.remove('dragging');
+  clearDropMark();
+  dragging = false;
+  dragId = null;
+}
+
+// Treu el vídeo d'on és i el torna a posar tocant a l'altre. Repinta de seguida
+// —l'ordre nou es veu sense esperar el servidor— i el desa; si el rebutja, es
+// torna enrere.
+function moveVideo(id, overId, after) {
+  const moved = ownVideos.find(v => v.id === id);
+  if (!moved || id === overId) return;
+
   const previous = ownVideos;
+  const rest = previous.filter(v => v.id !== id);
+  const at = rest.findIndex(v => v.id === overId);
+  if (at < 0) return;
 
-  const byId = new Map(previous.map(v => [v.id, v]));
-  const next = ids.map(id => byId.get(id)).filter(Boolean);
-  if (next.length !== previous.length) { render(); return; }   // desincronitzat: repinta
+  const next = [...rest.slice(0, at + (after ? 1 : 0)), moved, ...rest.slice(at + (after ? 1 : 0))];
+  if (next.every((v, i) => v.id === previous[i].id)) return;   // no s'ha mogut de lloc
+
   ownVideos = next;
+  render();
+  saveOrder(previous);
+}
 
+async function saveOrder(previous) {
   const secret = getSecret();
   if (!secret) { ownVideos = previous; render(); return; }
 
   // Dos moviments seguits enviarien dues peticions que poden arribar
   // desordenades al Worker, i la que fallés tornaria enrere a un ordre que ja no
-  // és el de ningú. Mentre es desa, la graella no es deixa tocar.
+  // és el de ningú. Mentre es desa, no es deixa arrossegar res més.
   savingOrder = true;
-  sortable?.option('disabled', true);
   try {
     await api('?action=reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
-      body: JSON.stringify({ ids }),
+      body: JSON.stringify({ ids: ownVideos.map(v => v.id) }),
     });
     toast('Ordre desat');
-    savingOrder = false;
-    sortable?.option('disabled', false);
   } catch (err) {
     ownVideos = previous;
-    savingOrder = false;
-    render();                  // el render refà el Sortable, ja sense bloquejar
+    render();
     toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar l'ordre: ${err.message}`);
+  } finally {
+    savingOrder = false;
   }
 }
 
@@ -1341,7 +1385,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes per la nansa (⠿) per canviar-ne l\'ordre; això només es pot fer en mode graella (⊞), no en masonry.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
