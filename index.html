@@ -928,6 +928,9 @@ layoutToggle.addEventListener('click', () => {
   const next = currentLayout() === 'masonry' ? 'grid' : 'masonry';
   applyLayout(next);
   try { localStorage.setItem(LAYOUT_KEY, next); } catch {}
+  // Canviar de disposició posa o treu la nansa d'arrossegar, que només té sentit
+  // a la graella; cal repintar perquè les targetes se n'assabentin.
+  if (!loading) render();
 });
 
 applyLayout(currentLayout());
@@ -1117,13 +1120,19 @@ function render({ animate = false } = {}) {
 /* ── Reordenació (només administrador) ─────────────────────────────────────── */
 // Arrossegar i deixar anar del navegador, sense cap llibreria. La targeta que
 // s'arrossega es recorda per l'id, i en deixar-la anar es reordena la llista
-// `ownVideos` —no el DOM— i es repinta: així l'ordre que es desa és sempre el
-// de les dades, i tant se val com les hagi col·locades la graella o el masonry.
+// `ownVideos` —no el DOM— i es repinta: l'ordre que es desa és sempre el de les
+// dades, no el que hagi acabat dibuixant el CSS.
 //
 // Els vídeos del codi no es poden moure, i mentre hi ha una cerca a mitges la
 // graella no ensenya tota la llista: l'ordre que s'enviaria seria incomplet.
+//
+// En masonry tampoc. Allà les targetes s'escampen per columnes de CSS i es
+// llegeixen amunt i avall, no d'esquerra a dreta: «deixa-la anar a la dreta
+// d'aquesta» no vol dir el que sembla, i en repintar la targeta va a parar a un
+// lloc que no és el que s'havia assenyalat. Es reordena a la graella (⊞).
 function canReorder() {
-  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1;
+  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1
+         && currentLayout() === 'grid';
 }
 
 let savingOrder = false;
@@ -1385,7 +1394,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir; això només es pot fer en mode graella (⊞), no en masonry.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
