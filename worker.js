@@ -2,10 +2,13 @@
  * Worker de la galeria @maquetes-f1n.
  *
  * Guarda la llista de vídeos afegits a KV, sota la clau "videos", com un array
- * JSON de { id, title, date_added }.
+ * JSON de { id, title, date_added }. L'ordre de l'array és l'ordre en què surten
+ * a la galeria: els vídeos nous s'afegeixen al davant i l'administrador el pot
+ * canviar arrossegant les targetes.
  *
  *   GET    /?action=list           → llista pública (CORS obert)
  *   POST   /?action=add            → body { id, title }   · X-Admin-Secret
+ *   POST   /?action=reorder        → body { ids: [...] }  · X-Admin-Secret
  *   DELETE /?action=remove&id=ID   → elimina un vídeo      · X-Admin-Secret
  */
 
@@ -95,9 +98,38 @@ export default {
       if (videos.some(v => v.id === id)) return json({ error: 'Aquest vídeo ja hi és' }, 409);
 
       const video = { id, title, date_added: todayISO() };
-      videos.push(video);
+      videos.unshift(video);            // el més nou, al davant de la galeria
       await writeVideos(env, videos);
       return json({ ok: true, video }, 201);
+    }
+
+    // Rep tots els ids en l'ordre nou. Els que no siguin a KV s'ignoren, i els de
+    // KV que no s'esmentin queden al final: així un client desincronitzat no en
+    // pot fer desaparèixer cap.
+    if (request.method === 'POST' && action === 'reorder') {
+      if (!secretOk(request, env)) return json({ error: 'No autoritzat' }, 401);
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: 'JSON invàlid' }, 400);
+      }
+
+      if (!Array.isArray(body?.ids)) return json({ error: "Falta la llista d'ids" }, 400);
+
+      const pending = new Map((await readVideos(env)).map(v => [v.id, v]));
+      const ordered = [];
+      for (const id of body.ids) {
+        const video = pending.get(id);
+        if (!video) continue;           // desconegut, o repetit dins d'ids
+        ordered.push(video);
+        pending.delete(id);
+      }
+      ordered.push(...pending.values());
+
+      await writeVideos(env, ordered);
+      return json({ ok: true });
     }
 
     if (request.method === 'DELETE' && action === 'remove') {

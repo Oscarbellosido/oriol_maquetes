@@ -330,6 +330,35 @@ h1 .dot { color: var(--accent); }
 }
 @media (hover: none) { .card-del, .card-share { opacity: 0.9; transform: none; } }
 
+/* Nansa per reordenar; només hi és quan hi ha contrasenya d'administrador.
+   Es veu sempre —si no, no se sabria que es pot arrossegar— però tènue. */
+.card-grip {
+  position: absolute; top: 0.65rem; left: 0.65rem; z-index: 2;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--overlay); border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.72);
+  font-size: 0.95rem; line-height: 1;
+  display: grid; place-items: center;
+  cursor: grab; touch-action: none;      /* que el dit arrossegui, no faci scroll */
+  opacity: 0.5;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.22s var(--ease), background 0.22s var(--ease),
+              border-color 0.22s var(--ease), color 0.22s var(--ease);
+}
+.card:hover .card-grip { opacity: 1; }
+.card-grip:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.card-grip:active { cursor: grabbing; }
+
+/* Estats d'arrossegament (SortableJS). */
+.card-ghost { opacity: 0.35; }
+.card-ghost .thumb { filter: grayscale(1); }
+.card-chosen { cursor: grabbing; }
+.card-drag {
+  transform: none;                       /* mana la posició que li dona Sortable */
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-xl);
+}
+
 /* Mentre s'espera la llista del servidor. */
 .loader {
   grid-column: 1 / -1;
@@ -608,6 +637,10 @@ footer a:hover { text-decoration: underline; }
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- Per arrossegar les targetes. Si el CDN falla, la galeria funciona igual:
+     simplement no es poden reordenar. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    LLISTA DE VÍDEOS
@@ -618,8 +651,9 @@ footer a:hover { text-decoration: underline; }
    Aquests vídeos surten al final de la galeria, en l'ordre d'aquesta llista.
 
    Els vídeos afegits amb el botó «+» no van aquí: es desen al Worker de
-   Cloudflare i surten davant d'aquesta llista —els més recents primer—, per a
-   tothom qui obri la pàgina.
+   Cloudflare i surten davant d'aquesta llista, per a tothom qui obri la pàgina.
+   El seu ordre el mana el servidor, i l'administrador el pot canviar
+   arrossegant les targetes. Aquests d'aquí sota no es poden reordenar.
    ───────────────────────────────────────────────────────────────────────────── */
 const VIDEOS = [
   { id: '1yf1jg6j8Dw', title: 'BMW Z3 1995 1/24 Tamiya',              date: '2026-08-13' },
@@ -718,6 +752,7 @@ function getSecret() {
     if (!s) return null;
     try { localStorage.setItem(SECRET_KEY, s); } catch {}
     updateSecretUi();
+    render();                                      // ara ja hi van les nanses
   }
   return s;
 }
@@ -725,6 +760,7 @@ function getSecret() {
 function forgetSecret() {
   try { localStorage.removeItem(SECRET_KEY); } catch {}
   updateSecretUi();
+  render();
 }
 
 // Permet posar-ne una de nova, o oblidar la desada deixant la resposta buida.
@@ -739,6 +775,7 @@ function changeSecret() {
   if (s) {
     try { localStorage.setItem(SECRET_KEY, s); } catch {}
     updateSecretUi();
+    render();
     toast('Contrasenya desada en aquest navegador');
   } else if (had) {
     forgetSecret();
@@ -767,11 +804,11 @@ async function fetchRemote() {
     .map(v => ({ id: v.id, title: String(v.title || ''), date: v.date_added || '', own: true }));
 }
 
-// Primer els del Worker, del més recent al més antic segons la data en què es van
-// afegir; després els del codi, que no en tenen i van sempre al final.
+// Primer els del Worker, en l'ordre que hi ha desat al servidor (els nous
+// s'hi afegeixen al davant, i l'administrador el pot canviar arrossegant-los);
+// després els del codi, que van sempre al final.
 function allVideos() {
-  const recents = [...ownVideos].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  return [...recents, ...VIDEOS];
+  return [...ownVideos, ...VIDEOS];
 }
 
 /* ── Render ────────────────────────────────────────────────────────────────── */
@@ -793,6 +830,7 @@ function makeCard(v, i, animate) {
   const card = document.createElement('article');
   card.className = animate ? 'card in' : 'card';
   card.dataset.id = v.id;
+  if (v.own) card.dataset.own = '1';                 // el selector que fa servir Sortable
   if (animate) card.style.setProperty('--i', i);
 
   const brand = brandOf(v.title);
@@ -847,6 +885,16 @@ function makeCard(v, i, animate) {
   }
 
   card.appendChild(actions);
+
+  if (v.own && canReorder()) {
+    const grip = document.createElement('span');
+    grip.className = 'card-grip';
+    grip.textContent = '⠿';
+    grip.title = 'Arrossega per canviar l\'ordre';
+    grip.setAttribute('aria-hidden', 'true');
+    card.appendChild(grip);
+  }
+
   return card;
 }
 
@@ -898,6 +946,64 @@ function render({ animate = false } = {}) {
   ownCount.textContent = n === 0
     ? 'Encara no s\'ha afegit cap vídeo des d\'aquí. Es desen al servidor i els veu tothom.'
     : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} des d'aquí. Es veuen a tot arreu.`;
+
+  setupSortable();
+}
+
+/* ── Reordenació (només administrador) ─────────────────────────────────────── */
+// Els vídeos del codi no es poden moure, i mentre hi ha una cerca a mitges la
+// graella no ensenya tota la llista: l'ordre que s'enviaria seria incomplet.
+function canReorder() {
+  return !loading && hasSecret() && !search.value.trim() && ownVideos.length > 1;
+}
+
+let sortable = null;
+
+function setupSortable() {
+  if (sortable) { sortable.destroy(); sortable = null; }
+  if (!canReorder() || !window.Sortable) return;
+
+  sortable = window.Sortable.create(grid, {
+    draggable: '.card[data-own="1"]',
+    handle: '.card-grip',
+    animation: 180,
+    ghostClass: 'card-ghost',
+    chosenClass: 'card-chosen',
+    dragClass: 'card-drag',
+    // Res no pot passar per davant o per darrere d'una targeta del codi.
+    onMove: evt => !!evt.related && evt.related.dataset.own === '1',
+    // Fora del gest: si falla, saveOrder() repinta, i amb això destruiria el
+    // Sortable que ara mateix encara està acabant el «drop».
+    onEnd: evt => { if (evt.oldIndex !== evt.newIndex) setTimeout(saveOrder, 0); },
+  });
+}
+
+// La graella ja està en l'ordre nou quan arribem aquí: només cal llegir-la i
+// desar-la. Si el servidor la rebutja, es torna enrere.
+async function saveOrder() {
+  const ids = [...grid.querySelectorAll('.card[data-own="1"]')].map(c => c.dataset.id);
+  const previous = ownVideos;
+
+  const byId = new Map(previous.map(v => [v.id, v]));
+  const next = ids.map(id => byId.get(id)).filter(Boolean);
+  if (next.length !== previous.length) { render(); return; }   // desincronitzat: repinta
+  ownVideos = next;
+
+  const secret = getSecret();
+  if (!secret) { ownVideos = previous; render(); return; }
+
+  try {
+    await api('?action=reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+      body: JSON.stringify({ ids }),
+    });
+    toast('Ordre desat');
+  } catch (err) {
+    ownVideos = previous;
+    render();
+    toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar l'ordre: ${err.message}`);
+  }
 }
 
 search.addEventListener('input', () => render());
@@ -995,7 +1101,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes per la nansa (⠿) per canviar-ne l\'ordre.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
@@ -1074,7 +1180,8 @@ adminForm.addEventListener('submit', async e => {
   }
   addBtn.disabled = false;
 
-  ownVideos.push({ id: video.id, title: video.title, date: video.date_added, own: true });
+  // Al davant de tot, igual que fa el Worker.
+  ownVideos.unshift({ id: video.id, title: video.title, date: video.date_added, own: true });
   render();
   adminForm.reset();
   setMsg('Vídeo afegit a la galeria.', 'ok');
