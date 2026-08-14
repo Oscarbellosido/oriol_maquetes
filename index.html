@@ -220,6 +220,11 @@ h1 .dot { color: var(--accent); }
   background: var(--chip); border: 1px solid var(--border);
   padding: 0.5rem 0.9rem; border-radius: 999px;
 }
+/* Igual que .count, però clicable: canvia entre graella i masonry. */
+.layout-toggle {
+  border-radius: 999px; padding: 0.5rem 0.95rem;
+  font-size: 0.78rem; white-space: nowrap;
+}
 
 /* ── Graella ───────────────────────────────────────────────────────────────── */
 .grid {
@@ -227,6 +232,16 @@ h1 .dot { color: var(--accent); }
   grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
   gap: 1.9rem;
 }
+/* Mode masonry: columnes de CSS, on cada targeta ocupa l'alçada que necessita
+   i no la que li imposa la fila. */
+.grid.masonry { display: block; columns: 3; column-gap: 1rem; }
+.grid.masonry .card {
+  width: 100%; margin: 0 0 1rem;
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+}
+.grid.masonry .loader { column-span: all; }
+@media (max-width: 960px) { .grid.masonry { columns: 2; } }
+@media (max-width: 640px) { .grid.masonry { columns: 1; } }
 .card {
   position: relative;
   background: var(--surface);
@@ -266,6 +281,12 @@ h1 .dot { color: var(--accent); }
   transition: transform 0.6s var(--ease), filter 0.4s var(--ease);
 }
 .card:hover .thumb { transform: scale(1.06); }
+/* Previsualització en silenci mentre el cursor és a sobre. L'iframe tapa la
+   miniatura, i .thumb-hit —que és dins del botó— es menja el clic perquè obri
+   el modal en comptes d'anar-se'n a dins de l'iframe de YouTube. */
+.thumb-preview { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 1; }
+.thumb-hit { position: absolute; inset: 0; z-index: 2; }
+.thumb-wrap.previewing .play { opacity: 0; }
 /* Degradat inferior perquè el títol respiri respecte de la imatge. */
 .thumb-wrap::after {
   content: ''; position: absolute; inset: auto 0 0 0; height: 45%;
@@ -274,14 +295,15 @@ h1 .dot { color: var(--accent); }
 }
 .card:hover .thumb-wrap::after { opacity: 1; }
 .play {
-  position: absolute; inset: 0; margin: auto; z-index: 1;
+  position: absolute; inset: 0; margin: auto; z-index: 3;
   width: 56px; height: 56px; border-radius: 50%;
   background: var(--overlay);
   border: 1.5px solid rgba(255,255,255,0.3);
   display: grid; place-items: center;
   backdrop-filter: blur(4px);
   transition: background 0.28s var(--ease), border-color 0.28s var(--ease),
-              transform 0.32s var(--ease), box-shadow 0.32s var(--ease);
+              transform 0.32s var(--ease), box-shadow 0.32s var(--ease),
+              opacity 0.28s var(--ease);
 }
 .play svg { width: 20px; height: 20px; fill: #fff; margin-left: 3px; }
 .card:hover .play {
@@ -302,10 +324,28 @@ h1 .dot { color: var(--accent); }
 }
 .badge-own { background: var(--chip); color: var(--text-dim); margin-left: 0; }
 
+/* Distintiu de les últimes incorporacions, a la cantonada de la miniatura.
+   S'aparta quan el cursor entra: allà mateix hi surten compartir i eliminar. */
+.badge-new {
+  position: absolute; top: 0.65rem; right: 0.65rem; z-index: 4;
+  background: var(--accent); color: var(--accent-ink);
+  border-radius: 7px; padding: 0.22rem 0.5rem;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.09em;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: opacity 0.22s var(--ease);
+}
+.card:hover .badge-new, .card:focus-within .badge-new { opacity: 0; }
+/* Sense cursor les accions no s'amaguen mai: el distintiu es queda i són elles
+   les que baixen una fila. */
+@media (hover: none) {
+  .card:hover .badge-new, .card:focus-within .badge-new { opacity: 1; }
+  .card.has-new .card-actions { top: 2.9rem; }
+}
+
 /* Accions de la targeta: compartir sempre, i eliminar només a les del servidor.
    Van fora del botó .card-main, que no pot contenir altres botons. */
 .card-actions {
-  position: absolute; top: 0.65rem; right: 0.65rem; z-index: 2;
+  position: absolute; top: 0.65rem; right: 0.65rem; z-index: 5;
   display: flex; gap: 0.4rem;
 }
 .card-del, .card-share {
@@ -333,7 +373,7 @@ h1 .dot { color: var(--accent); }
 /* Nansa per reordenar; només hi és quan hi ha contrasenya d'administrador.
    Es veu sempre —si no, no se sabria que es pot arrossegar— però tènue. */
 .card-grip {
-  position: absolute; top: 0.65rem; left: 0.65rem; z-index: 2;
+  position: absolute; top: 0.65rem; left: 0.65rem; z-index: 5;
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--overlay); border: 1px solid rgba(255,255,255,0.16);
   color: rgba(255,255,255,0.72);
@@ -394,8 +434,27 @@ h1 .dot { color: var(--accent); }
   box-shadow: var(--shadow-xl);
   animation: pop 0.3s var(--ease);
 }
+.player-wrap { position: relative; }
 .player { position: relative; aspect-ratio: 16 / 9; background: #000; }
 .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Anterior / següent dins de la llista que s'està veient. Van damunt de
+   l'iframe, arrambats als costats perquè no tapin els controls de YouTube. */
+.nav-btn {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--overlay); border: 1px solid rgba(255,255,255,0.22);
+  color: #fff; font-family: inherit; font-size: 1.75rem; line-height: 1;
+  padding: 0 0 0.16em; cursor: pointer;
+  display: grid; place-items: center;
+  backdrop-filter: blur(4px);
+  transition: background 0.22s var(--ease), border-color 0.22s var(--ease),
+              transform 0.22s var(--ease);
+}
+.nav-btn:hover { background: var(--accent); border-color: var(--accent); transform: translateY(-50%) scale(1.1); }
+.nav-btn[hidden] { display: none; }
+.nav-prev { left: 0.75rem; }
+.nav-next { right: 0.75rem; }
 .modal-bar { display: flex; align-items: center; gap: 1rem; padding: 1.1rem 1.3rem; }
 .modal-info { min-width: 0; }
 .modal-title { font-family: var(--font-display); font-size: 1.08rem; font-weight: 600; line-height: 1.35; }
@@ -577,6 +636,7 @@ footer a:hover { text-decoration: underline; }
       <input type="text" class="search" id="search" placeholder="Cerca per títol… (p. ex. Tamiya, Porsche, Heller)" autocomplete="off">
       <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></svg>
     </div>
+    <button class="btn layout-toggle" id="layoutToggle" type="button"></button>
     <span class="count" id="count"></span>
   </div>
 
@@ -593,7 +653,11 @@ footer a:hover { text-decoration: underline; }
 <!-- ── Modal ─────────────────────────────────────────────────────────────────── -->
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-box">
-    <div class="player" id="player"></div>
+    <div class="player-wrap">
+      <div class="player" id="player"></div>
+      <button class="nav-btn nav-prev" id="modalPrev" type="button" aria-label="Vídeo anterior" title="Vídeo anterior (←)">&lsaquo;</button>
+      <button class="nav-btn nav-next" id="modalNext" type="button" aria-label="Vídeo següent" title="Vídeo següent (→)">&rsaquo;</button>
+    </div>
     <div class="modal-bar">
       <div class="modal-info">
         <div class="modal-title" id="modalTitle"></div>
@@ -697,6 +761,21 @@ function formatDate(iso) {
   const de = /^[aeiou]/.test(mes) ? "d'" : 'de ';   // d'abril, d'agost, d'octubre
   return `${Number(m[3])} ${de}${mes} de ${m[1]}`;
 }
+
+// Els vídeos d'aquests últims dies porten distintiu. La data dels onze primers
+// que es van migrar al Worker és inventada: no compta com a incorporació nova.
+const NEW_DAYS = 14;
+const MIGRATED_DATE = '2024-01-01';
+
+function isNew(iso) {
+  if (!iso || iso === MIGRATED_DATE) return false;
+  const t = Date.parse(`${iso}T00:00:00`);
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t <= NEW_DAYS * 86400000;
+}
+
+// A les pantalles tàctils no hi ha «passar-hi el cursor»: allà, cap preview.
+const CAN_HOVER = !window.matchMedia('(hover: none)').matches;
 
 // La marca (Tamiya, Heller…) és l'última paraula del títol quan no és una escala.
 function brandOf(title) {
@@ -824,6 +903,35 @@ const count     = document.getElementById('count');
 const search    = document.getElementById('search');
 const headCount = document.getElementById('headCount');
 
+/* ── Graella o masonry ─────────────────────────────────────────────────────── */
+// La graella iguala l'alçada de tota la fila; el masonry deixa que cada targeta
+// ocupi la seva i encaixa la següent a sota. Per defecte, graella.
+const LAYOUT_KEY = 'layout-mode';
+const layoutToggle = document.getElementById('layoutToggle');
+
+function currentLayout() {
+  try { return localStorage.getItem(LAYOUT_KEY) === 'masonry' ? 'masonry' : 'grid'; }
+  catch { return 'grid'; }
+}
+
+function applyLayout(mode) {
+  const masonry = mode === 'masonry';
+  grid.classList.toggle('masonry', masonry);
+  layoutToggle.textContent = masonry ? '⣿ Masonry' : '⊞ Grid';
+  const label = masonry ? 'Torna a la graella' : 'Canvia a masonry';
+  layoutToggle.title = label;
+  layoutToggle.setAttribute('aria-label', label);
+  layoutToggle.setAttribute('aria-pressed', String(masonry));
+}
+
+layoutToggle.addEventListener('click', () => {
+  const next = currentLayout() === 'masonry' ? 'grid' : 'masonry';
+  applyLayout(next);
+  try { localStorage.setItem(LAYOUT_KEY, next); } catch {}
+});
+
+applyLayout(currentLayout());
+
 function makeLoader() {
   const box = document.createElement('div');
   box.className = 'loader';
@@ -840,11 +948,16 @@ function makeCard(v, i, animate) {
   if (animate) card.style.setProperty('--i', i);
 
   const brand = brandOf(v.title);
+  const fresh = isNew(v.date);
+  if (fresh) card.classList.add('has-new');
+
   card.innerHTML = `
     <button class="card-main" type="button">
       <div class="thumb-wrap">
         <img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
+        <span class="thumb-hit" aria-hidden="true"></span>
         <span class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+        ${fresh ? '<span class="badge-new">NOU</span>' : ''}
       </div>
       <div class="card-body">
         <div class="card-title"></div>
@@ -901,7 +1014,43 @@ function makeCard(v, i, animate) {
     card.appendChild(grip);
   }
 
+  attachPreview(card, v);
   return card;
+}
+
+/* ── Previsualització en passar-hi el cursor ───────────────────────────────── */
+// L'iframe es crea en entrar i es destrueix en sortir: així no queden vídeos
+// carregats de fons, i en tornar-hi la previsualització arrenca de zero.
+function attachPreview(card, v) {
+  if (!CAN_HOVER) return;
+
+  const wrap = card.querySelector('.thumb-wrap');
+
+  card.addEventListener('mouseenter', () => {
+    if (wrap.querySelector('.thumb-preview')) return;
+    const frame = document.createElement('iframe');
+    frame.className = 'thumb-preview';
+    frame.src = `https://www.youtube-nocookie.com/embed/${v.id}` +
+                `?autoplay=1&mute=1&loop=1&playlist=${v.id}&controls=0&showinfo=0&rel=0`;
+    frame.allow = 'autoplay; encrypted-media';
+    frame.tabIndex = -1;                       // el tabulador no hi ha d'entrar
+    frame.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(frame);
+    wrap.classList.add('previewing');
+  });
+
+  card.addEventListener('mouseleave', () => stopPreview(wrap));
+}
+
+function stopPreview(wrap) {
+  wrap.classList.remove('previewing');
+  wrap.querySelector('.thumb-preview')?.remove();
+}
+
+// En obrir el modal el cursor pot quedar-se damunt d'una targeta sense que
+// arribi a saltar el «mouseleave»: val més escombrar-ho tot.
+function stopAllPreviews() {
+  grid.querySelectorAll('.thumb-wrap.previewing').forEach(stopPreview);
 }
 
 // Comparteix amb el diàleg del sistema si n'hi ha; si no, copia l'enllaç.
@@ -923,11 +1072,18 @@ async function shareVideo(v) {
   }
 }
 
-// `animate` només quan la llista canvia de debò; en cercar les targetes no ballen.
-function render({ animate = false } = {}) {
+// El que es veu ara mateix a la graella, amb la cerca ja aplicada. El modal
+// també la fa servir: anterior i següent es mouen per aquesta mateixa llista.
+function filteredVideos() {
   const q = search.value.trim().toLowerCase();
   const all = allVideos();
-  const list = q ? all.filter(v => v.title.toLowerCase().includes(q)) : all;
+  return q ? all.filter(v => v.title.toLowerCase().includes(q)) : all;
+}
+
+// `animate` només quan la llista canvia de debò; en cercar les targetes no ballen.
+function render({ animate = false } = {}) {
+  const all = allVideos();
+  const list = filteredVideos();
 
   // Mentre arriba la llista del servidor no es pinta res: l'ordre encara pot
   // canviar, perquè els vídeos del Worker van al davant.
@@ -954,6 +1110,7 @@ function render({ animate = false } = {}) {
     : `${n} vídeo${n === 1 ? '' : 's'} afegit${n === 1 ? '' : 's'} des d'aquí. Es veuen a tot arreu.`;
 
   setupSortable();
+  updateModalNav();          // si la cerca ha canviat, els extrems també
 }
 
 /* ── Reordenació (només administrador) ─────────────────────────────────────── */
@@ -1052,8 +1209,14 @@ const player     = document.getElementById('player');
 const modalTitle = document.getElementById('modalTitle');
 const modalDate  = document.getElementById('modalDate');
 const modalYt    = document.getElementById('modalYt');
+const modalPrev  = document.getElementById('modalPrev');
+const modalNext  = document.getElementById('modalNext');
+
+let currentVideo = null;      // el que s'està veient, per saber-ne els veïns
 
 function openModal(v) {
+  stopAllPreviews();
+  currentVideo = v;
   modalTitle.textContent = v.title;
   modalDate.textContent  = v.own ? `Afegit el ${formatDate(v.date)}` : formatDate(v.date);
   modalYt.href = `https://www.youtube.com/watch?v=${v.id}`;
@@ -1065,6 +1228,7 @@ function openModal(v) {
   frame.allowFullscreen = true;
   player.replaceChildren(frame);
 
+  updateModalNav();
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -1072,11 +1236,42 @@ function openModal(v) {
 function closeModal() {
   modal.classList.remove('open');
   player.replaceChildren();          // atura la reproducció
+  currentVideo = null;
   document.body.style.overflow = '';
 }
 
+// Posició del vídeo obert dins de la llista que es veu; -1 si la cerca l'ha
+// deixat fora mentre el modal era obert.
+function modalIndex(list) {
+  return currentVideo ? list.findIndex(v => v.id === currentVideo.id) : -1;
+}
+
+function updateModalNav() {
+  const list = filteredVideos();
+  const i = modalIndex(list);
+  modalPrev.hidden = i <= 0;
+  modalNext.hidden = i < 0 || i >= list.length - 1;
+}
+
+function stepModal(delta) {
+  const list = filteredVideos();
+  const i = modalIndex(list);
+  if (i < 0) return;
+  const next = list[i + delta];
+  if (next) openModal(next);
+}
+
 document.getElementById('modalClose').addEventListener('click', closeModal);
+modalPrev.addEventListener('click', () => stepModal(-1));
+modalNext.addEventListener('click', () => stepModal(1));
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+// Fletxes per saltar de vídeo, però només amb el reproductor obert.
+document.addEventListener('keydown', e => {
+  if (!modal.classList.contains('open') || adminModal.classList.contains('open')) return;
+  if (e.key === 'ArrowLeft')       { e.preventDefault(); stepModal(-1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); stepModal(1); }
+});
 
 /* ── Panell d'administració ────────────────────────────────────────────────── */
 const adminModal = document.getElementById('adminModal');
