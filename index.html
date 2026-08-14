@@ -180,6 +180,16 @@ h1 .dot { color: var(--accent); }
   color: var(--text-dim); font-size: 1.02rem; line-height: 1.65;
   max-width: 56ch; margin: 1.5rem auto 0;
 }
+/* Comptador del total; apareix quan ja s'ha carregat la llista del servidor. */
+.head-count {
+  display: inline-block; margin-top: 1.1rem;
+  background: var(--chip); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.78rem; font-weight: 600;
+  padding: 0.35rem 0.9rem; border-radius: 999px;
+  opacity: 0; transform: translateY(-4px);
+  transition: opacity 0.35s var(--ease), transform 0.35s var(--ease);
+}
+.head-count.show { opacity: 1; transform: none; }
 
 /* ── Barra d'eines ─────────────────────────────────────────────────────────── */
 .toolbar {
@@ -292,21 +302,46 @@ h1 .dot { color: var(--accent); }
 }
 .badge-own { background: var(--chip); color: var(--text-dim); margin-left: 0; }
 
-/* Botó d'eliminar: només a les targetes desades al servidor. */
-.card-del {
+/* Accions de la targeta: compartir sempre, i eliminar només a les del servidor.
+   Van fora del botó .card-main, que no pot contenir altres botons. */
+.card-actions {
   position: absolute; top: 0.65rem; right: 0.65rem; z-index: 2;
+  display: flex; gap: 0.4rem;
+}
+.card-del, .card-share {
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--overlay); border: 1px solid rgba(255,255,255,0.2);
   color: #fff; font-size: 1.05rem; line-height: 1; cursor: pointer;
+  font-family: inherit;
   display: grid; place-items: center;
   opacity: 0; transform: scale(0.85);
   backdrop-filter: blur(4px);
   transition: opacity 0.22s var(--ease), transform 0.22s var(--ease),
               background 0.22s var(--ease), border-color 0.22s var(--ease);
 }
-.card:hover .card-del, .card-del:focus-visible { opacity: 1; transform: none; }
+.card:hover .card-del, .card:hover .card-share,
+.card-del:focus-visible, .card-share:focus-visible { opacity: 1; transform: none; }
 .card-del:hover { background: #d63a2a; border-color: #d63a2a; transform: scale(1.1); }
-@media (hover: none) { .card-del { opacity: 0.9; transform: none; } }
+.card-share:hover { background: var(--accent); border-color: var(--accent); transform: scale(1.1); }
+.card-share svg {
+  width: 15px; height: 15px;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (hover: none) { .card-del, .card-share { opacity: 0.9; transform: none; } }
+
+/* Mentre s'espera la llista del servidor. */
+.loader {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column; align-items: center; gap: 0.9rem;
+  padding: 4rem 1rem; color: var(--text-dim); font-size: 0.9rem;
+}
+.spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid var(--border-strong); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .empty { color: var(--text-dim); text-align: center; padding: 4rem 1rem; font-size: 0.95rem; }
 
@@ -460,6 +495,8 @@ footer a:hover { text-decoration: underline; }
     transition-duration: 0.01ms !important; scroll-behavior: auto !important;
   }
   .card:hover { transform: none; }
+  /* El cercle congelat semblaria un element trencat: queda només el text. */
+  .spinner { display: none; }
 }
 </style>
 </head>
@@ -501,6 +538,7 @@ footer a:hover { text-decoration: underline; }
       </div>
     </div>
     <p class="subtitle">Galeria de maquetes de cotxes a escala 1/24. Fes clic a qualsevol targeta per veure el vídeo sense sortir de la pàgina.</p>
+    <p class="head-count" id="headCount" role="status" aria-live="polite"></p>
   </header>
 
   <div class="toolbar">
@@ -577,10 +615,11 @@ footer a:hover { text-decoration: underline; }
      id    → els 11 caràcters de la URL de YouTube (…/watch?v=AQUÍ)
      title → títol que es mostra a la targeta
      date  → data en format AAAA-MM-DD
-   L'ordre de la llista és l'ordre en què surten a la galeria.
+   Aquests vídeos surten al final de la galeria, en l'ordre d'aquesta llista.
 
    Els vídeos afegits amb el botó «+» no van aquí: es desen al Worker de
-   Cloudflare i surten darrere d'aquesta llista, per a tothom qui obri la pàgina.
+   Cloudflare i surten davant d'aquesta llista —els més recents primer—, per a
+   tothom qui obri la pàgina.
    ───────────────────────────────────────────────────────────────────────────── */
 const VIDEOS = [
   { id: '1yf1jg6j8Dw', title: 'BMW Z3 1995 1/24 Tamiya',              date: '2026-08-13' },
@@ -728,16 +767,27 @@ async function fetchRemote() {
     .map(v => ({ id: v.id, title: String(v.title || ''), date: v.date_added || '', own: true }));
 }
 
-// Els vídeos del codi sempre primer; després els del Worker.
+// Primer els del Worker, del més recent al més antic segons la data en què es van
+// afegir; després els del codi, que no en tenen i van sempre al final.
 function allVideos() {
-  return [...VIDEOS, ...ownVideos];
+  const recents = [...ownVideos].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return [...recents, ...VIDEOS];
 }
 
 /* ── Render ────────────────────────────────────────────────────────────────── */
-const grid   = document.getElementById('grid');
-const empty  = document.getElementById('empty');
-const count  = document.getElementById('count');
-const search = document.getElementById('search');
+const grid      = document.getElementById('grid');
+const empty     = document.getElementById('empty');
+const count     = document.getElementById('count');
+const search    = document.getElementById('search');
+const headCount = document.getElementById('headCount');
+
+function makeLoader() {
+  const box = document.createElement('div');
+  box.className = 'loader';
+  box.setAttribute('role', 'status');
+  box.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Carregant els vídeos…</span>';
+  return box;
+}
 
 function makeCard(v, i, animate) {
   const card = document.createElement('article');
@@ -769,6 +819,22 @@ function makeCard(v, i, animate) {
   if (brand) card.querySelector('.badge:not(.badge-own)').textContent = brand;
   main.addEventListener('click', () => openModal(v));
 
+  const actions = document.createElement('div');
+  actions.className = 'card-actions';
+
+  const share = document.createElement('button');
+  share.className = 'card-share';
+  share.type = 'button';
+  share.title = 'Comparteix aquest vídeo';
+  share.setAttribute('aria-label', `Comparteix ${v.title}`);
+  share.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/>
+      <path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>
+    </svg>`;
+  share.addEventListener('click', () => shareVideo(v));
+  actions.appendChild(share);
+
   if (v.own) {
     const del = document.createElement('button');
     del.className = 'card-del';
@@ -777,9 +843,30 @@ function makeCard(v, i, animate) {
     del.title = 'Elimina aquest vídeo';
     del.setAttribute('aria-label', `Elimina ${v.title}`);
     del.addEventListener('click', () => removeOwn(v));
-    card.appendChild(del);
+    actions.appendChild(del);
   }
+
+  card.appendChild(actions);
   return card;
+}
+
+// Comparteix amb el diàleg del sistema si n'hi ha; si no, copia l'enllaç.
+async function shareVideo(v) {
+  const url = `https://youtube.com/watch?v=${v.id}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: v.title, url });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;   // ha tancat el diàleg
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Enllaç copiat!');
+  } catch {
+    toast('No s\'ha pogut copiar l\'enllaç');
+  }
 }
 
 // `animate` només quan la llista canvia de debò; en cercar les targetes no ballen.
@@ -788,13 +875,24 @@ function render({ animate = false } = {}) {
   const all = allVideos();
   const list = q ? all.filter(v => v.title.toLowerCase().includes(q)) : all;
 
-  grid.replaceChildren(...list.map((v, i) => makeCard(v, i, animate)));
-  empty.hidden = list.length > 0;
+  // Mentre arriba la llista del servidor no es pinta res: l'ordre encara pot
+  // canviar, perquè els vídeos del Worker van al davant.
+  if (loading) {
+    grid.replaceChildren(makeLoader());
+    empty.hidden = true;
+  } else {
+    grid.replaceChildren(...list.map((v, i) => makeCard(v, i, animate)));
+    empty.hidden = list.length > 0;
+  }
+
   count.textContent = loading
     ? 'Carregant…'
     : list.length === all.length
       ? `${all.length} vídeos`
       : `${list.length} de ${all.length} vídeos`;
+
+  headCount.textContent = loading ? '' : `${all.length} vídeos`;
+  headCount.classList.toggle('show', !loading);
 
   const n = ownVideos.length;
   ownCount.textContent = n === 0
