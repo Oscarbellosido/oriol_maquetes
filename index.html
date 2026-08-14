@@ -491,6 +491,8 @@ footer {
 }
 footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
 footer a:hover { text-decoration: underline; }
+/* En una línia a part i encara més apagat: és un detall, no informació de la galeria. */
+.visits { display: block; margin-top: 0.6rem; font-size: 0.74rem; opacity: 0.7; }
 
 /* ── Mòbil ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
@@ -583,6 +585,8 @@ footer a:hover { text-decoration: underline; }
 
   <footer>
     Canal <a href="https://youtube.com/@maquetes-f1n" target="_blank" rel="noopener">@maquetes-f1n</a> · Galeria feta amb un sol fitxer HTML
+    <!-- Buit fins que el Worker respon; si falla, no s'hi arriba a posar res. -->
+    <span class="visits" id="visits" hidden></span>
   </footer>
 </div>
 
@@ -782,6 +786,20 @@ async function api(path, options = {}) {
     throw err;
   }
   return data;
+}
+
+// Suma la visita i ensenya el total al peu. No té res a veure amb la galeria:
+// si el Worker no respon, el peu es queda tal com és i no es diu res a l'usuari.
+function countVisit() {
+  api('?action=visit')
+    .then(data => {
+      const n = Number(data && data.visits);
+      if (!Number.isFinite(n) || n < 1) return;
+      const el = document.getElementById('visits');
+      el.textContent = `👁 ${n.toLocaleString('ca-ES')} ${n === 1 ? 'visita' : 'visites'}`;
+      el.hidden = false;
+    })
+    .catch(() => {});
 }
 
 async function fetchRemote() {
@@ -1195,6 +1213,7 @@ document.addEventListener('keydown', e => {
 updateSecretUi();
 render({ animate: true });
 refresh();
+countVisit();
 </script>
 
 </body>

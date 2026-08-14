@@ -7,12 +7,15 @@
  * canviar arrossegant les targetes.
  *
  *   GET    /?action=list           → llista pública (CORS obert)
+ *   GET    /?action=visit          → suma una visita i retorna el total
+ *   GET    /?action=stats          → retorna el total de visites, sense sumar-ne
  *   POST   /?action=add            → body { id, title }   · X-Admin-Secret
  *   POST   /?action=reorder        → body { ids: [...] }  · X-Admin-Secret
  *   DELETE /?action=remove&id=ID   → elimina un vídeo      · X-Admin-Secret
  */
 
 const KEY = 'videos';
+const VISITS_KEY = 'visits';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -49,6 +52,11 @@ async function writeVideos(env, videos) {
   await env.VIDEOS_KV.put(KEY, JSON.stringify(videos));
 }
 
+async function readVisits(env) {
+  const n = Number(await env.VIDEOS_KV.get(VISITS_KEY));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 // Comparació en temps constant, per no filtrar el secret amb el temps de resposta.
 function secretOk(request, env) {
   const given = request.headers.get('X-Admin-Secret') || '';
@@ -75,6 +83,18 @@ export default {
     // ── Públic ───────────────────────────────────────────────────────────────
     if (request.method === 'GET' && action === 'list') {
       return json(await readVideos(env));
+    }
+
+    // Llegir-sumar-escriure no és atòmic a KV: amb dues visites alhora se'n pot
+    // perdre alguna. Per a un comptador orientatiu de galeria ja va bé.
+    if (request.method === 'GET' && action === 'visit') {
+      const visits = (await readVisits(env)) + 1;
+      await env.VIDEOS_KV.put(VISITS_KEY, String(visits));
+      return json({ visits });
+    }
+
+    if (request.method === 'GET' && action === 'stats') {
+      return json({ visits: await readVisits(env) });
     }
 
     // ── Administració ────────────────────────────────────────────────────────
