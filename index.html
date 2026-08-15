@@ -705,6 +705,7 @@ footer a:hover { text-decoration: underline; }
     Canal <a href="https://youtube.com/@maquetes-f1n" target="_blank" rel="noopener">@maquetes-f1n</a> · Galeria feta amb un sol fitxer HTML
     <!-- Buit fins que el Worker respon; si falla, no s'hi arriba a posar res. -->
     <span class="visits" id="visits" hidden></span>
+    <span class="visits" id="app-version"></span>
   </footer>
 </div>
 
@@ -764,6 +765,8 @@ footer a:hover { text-decoration: underline; }
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+const APP_VERSION = '2026-08-15';
+
 /* ─────────────────────────────────────────────────────────────────────────────
    LLISTA DE VÍDEOS
    Per afegir-ne un de nou, copia una línia i canvia les dades:
@@ -1858,6 +1861,7 @@ updateSecretUi();
 render({ animate: true });
 refresh();
 countVisit();
+document.getElementById('app-version').textContent = `v${APP_VERSION}`;
 </script>
 
 </body>
