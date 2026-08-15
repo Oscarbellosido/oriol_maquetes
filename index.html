@@ -1388,8 +1388,13 @@ document.addEventListener('touchmove', e => {
   e.preventDefault();                      // res de scroll mentre s'arrossega
   const t = e.touches[0];
   if (!t) return;
-  // Sota el dit no hi ha «target» que valgui: cal preguntar-ho al document.
+  // Sota el dit no hi ha «target» que valgui: cal preguntar-ho al document. Però
+  // la que s'arrossega tapa el punt on hi ha el dit i seria l'única resposta: cal
+  // amagar-la un instant —sense treure-la del lloc— per veure què hi ha a sota.
+  const held = grid.querySelector('.card.dragging');
+  if (held) held.style.visibility = 'hidden';
   const card = document.elementFromPoint(t.clientX, t.clientY)?.closest?.('.card[data-own="1"]');
+  if (held) held.style.visibility = '';
   if (!card || card.dataset.id === dragId) { clearDropMark(); return; }
   // Meitat esquerra, va al davant; meitat dreta, al darrere. Igual que amb el ratolí.
   const box = card.getBoundingClientRect();
