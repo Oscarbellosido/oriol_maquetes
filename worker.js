@@ -9,8 +9,8 @@
  *   GET    /?action=list           → llista pública (CORS obert)
  *   GET    /?action=visit          → suma una visita i retorna el total
  *   GET    /?action=stats          → retorna el total de visites, sense sumar-ne
- *   POST   /?action=add            → body { id, title }   · X-Admin-Secret
- *   POST   /?action=update         → body { id, title }   · X-Admin-Secret
+ *   POST   /?action=add            → body { id, title }                    · X-Admin-Secret
+ *   POST   /?action=update         → body { id, title?, description? }    · X-Admin-Secret
  *   POST   /?action=reorder        → body { ids: [...] }  · X-Admin-Secret
  *   DELETE /?action=remove&id=ID   → elimina un vídeo      · X-Admin-Secret
  */
@@ -46,7 +46,7 @@ async function readVideos(env) {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(v => v && validId(v.id) && typeof v.title === 'string')
-    .map(v => ({ id: v.id, title: v.title, date_added: v.date_added || '' }));
+    .map(v => ({ id: v.id, title: v.title, date_added: v.date_added || '', description: typeof v.description === 'string' ? v.description : '' }));
 }
 
 async function writeVideos(env, videos) {
@@ -124,8 +124,9 @@ export default {
       return json({ ok: true, video }, 201);
     }
 
-    // Canvia el títol d'un vídeo que ja hi és. La resta de camps (l'ordre dins de
-    // la llista, la data) no es toquen.
+    // Canvia el títol i/o la descripció d'un vídeo que ja hi és, segons quins
+    // camps arribin al body. La resta (l'ordre dins de la llista, la data) no
+    // es toca.
     if (request.method === 'POST' && action === 'update') {
       if (!secretOk(request, env)) return json({ error: 'No autoritzat' }, 401);
 
@@ -137,19 +138,26 @@ export default {
       }
 
       const id = typeof body?.id === 'string' ? body.id.trim() : '';
-      const title = typeof body?.title === 'string' ? body.title.trim() : '';
       if (!validId(id)) return json({ error: "L'ID del vídeo no és vàlid" }, 400);
-      if (!title) return json({ error: 'Falta el títol' }, 400);
-      if (title.length > 200) return json({ error: 'El títol és massa llarg' }, 400);
+
+      const hasTitle = typeof body?.title === 'string';
+      const hasDescription = typeof body?.description === 'string';
+      if (!hasTitle && !hasDescription) return json({ error: 'Falta el títol o la descripció' }, 400);
+
+      const title = hasTitle ? body.title.trim() : '';
+      const description = hasDescription ? body.description.trim() : '';
+      if (hasTitle && !title) return json({ error: 'Falta el títol' }, 400);
+      if (hasTitle && title.length > 200) return json({ error: 'El títol és massa llarg' }, 400);
+      if (hasDescription && description.length > 2000) return json({ error: 'La descripció és massa llarga' }, 400);
 
       const videos = await readVideos(env);
       const video = videos.find(v => v.id === id);
       if (!video) return json({ error: 'Vídeo no trobat' }, 404);
 
-      if (video.title !== title) {
-        video.title = title;
-        await writeVideos(env, videos);
-      }
+      let changed = false;
+      if (hasTitle && video.title !== title) { video.title = title; changed = true; }
+      if (hasDescription && video.description !== description) { video.description = description; changed = true; }
+      if (changed) await writeVideos(env, videos);
       return json({ ok: true, video });
     }
 

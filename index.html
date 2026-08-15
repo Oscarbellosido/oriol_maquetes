@@ -334,6 +334,27 @@ h1 .dot { color: var(--accent); }
   transition: box-shadow 0.22s var(--ease);
 }
 .title-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
+/* Descripció editable: mateix comportament que el títol. */
+.card-desc { font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
+.card-desc.placeholder { opacity: 0.7; font-style: italic; }
+.card-desc.editable { cursor: text; }
+.card-desc.editable::after {
+  content: ' ✏️';
+  font-size: 0.82em;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.card-desc.editable:hover::after { opacity: 0.9; }
+.card-desc.editing::after { content: none; }
+.desc-input {
+  display: block; width: 100%; resize: vertical; min-height: 3.6em;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-accent); border-radius: var(--r-sm);
+  padding: 0.3rem 0.5rem;
+  font: inherit; outline: none;
+  transition: box-shadow 0.22s var(--ease);
+}
+.desc-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .card-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; }
 .date { color: var(--text-dim); font-size: 0.76rem; }
 .badge {
@@ -906,7 +927,7 @@ async function fetchRemote() {
   const known = new Set(VIDEOS.map(v => v.id));
   return (Array.isArray(data) ? data : [])
     .filter(v => v && typeof v.id === 'string' && !known.has(v.id))
-    .map(v => ({ id: v.id, title: String(v.title || ''), date: v.date_added || '', own: true }));
+    .map(v => ({ id: v.id, title: String(v.title || ''), description: String(v.description || ''), date: v.date_added || '', own: true }));
 }
 
 // Primer els del Worker, en l'ordre que hi ha desat al servidor (els nous
@@ -986,6 +1007,7 @@ function makeCard(v, i, animate) {
       </div>
       <div class="card-body">
         <div class="card-title"></div>
+        <div class="card-desc"></div>
         <div class="card-meta">
           <span class="date"></span>
           ${v.own ? '<span class="badge badge-own">Afegit</span>' : ''}
@@ -1019,6 +1041,28 @@ function makeCard(v, i, animate) {
       e.preventDefault();
       e.stopPropagation();
       editTitle(card, v);
+    });
+  }
+
+  // La descripció es comporta igual que el títol: doble clic per editar-la.
+  const desc = card.querySelector('.card-desc');
+  const canEditDesc = v.own && hasSecret();
+  if (v.description) {
+    desc.textContent = v.description;
+  } else if (canEditDesc) {
+    desc.textContent = 'Afegeix una descripció…';
+    desc.classList.add('placeholder');
+  } else {
+    desc.hidden = true;
+  }
+  if (canEditDesc) {
+    desc.classList.add('editable');
+    desc.title = 'Doble clic per canviar la descripció';
+    desc.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+    desc.addEventListener('dblclick', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      editDescription(card, v);
     });
   }
 
@@ -1416,6 +1460,90 @@ async function saveTitle(v, title, before) {
   }
 }
 
+/* ── Edició de la descripció (només administrador) ─────────────────────────── */
+// Mateix mecanisme que editTitle(), amb un <textarea> perquè la descripció pot
+// ocupar més d'una línia.
+function editDescription(card, v) {
+  const descEl = card.querySelector('.card-desc');
+  if (!descEl || descEl.classList.contains('editing')) return;
+
+  const before = v.description || '';
+  descEl.classList.add('editing');
+  descEl.classList.remove('placeholder');
+  descEl.textContent = '';
+
+  const input = document.createElement('textarea');
+  input.className = 'desc-input';
+  input.value = before;
+  input.maxLength = 2000;
+  input.rows = 3;
+  input.setAttribute('aria-label', 'Descripció del vídeo');
+  descEl.appendChild(input);
+
+  const wasDraggable = card.draggable;
+  card.draggable = false;
+
+  input.focus();
+  input.select();
+
+  let closed = false;
+  function finish(save) {
+    if (closed) return;
+    closed = true;
+    card.draggable = wasDraggable;
+    descEl.classList.remove('editing');
+
+    const next = input.value.trim();
+    if (!save || next === before) {
+      renderDescText(descEl, before);
+      return;
+    }
+    renderDescText(descEl, next);          // es veu de seguida; si falla, es desfà
+    saveDescription(v, next, before);
+  }
+
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape')          { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+// Torna a pintar el text pla de la descripció, amb el mateix aspecte de
+// «placeholder» que fa servir makeCard() quan és buida.
+function renderDescText(descEl, text) {
+  if (text) {
+    descEl.textContent = text;
+    descEl.classList.remove('placeholder');
+  } else {
+    descEl.textContent = 'Afegeix una descripció…';
+    descEl.classList.add('placeholder');
+  }
+}
+
+async function saveDescription(v, description, before) {
+  const secret = getSecret();
+  if (!secret) { render(); return; }
+
+  v.description = description;           // `v` és el mateix objecte d'ownVideos
+
+  try {
+    await api('?action=update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+      body: JSON.stringify({ id: v.id, description }),
+    });
+    toast('Descripció desada');
+  } catch (err) {
+    v.description = before;
+    render();
+    toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar la descripció: ${err.message}`);
+  }
+}
+
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 const modal      = document.getElementById('modal');
 const player     = document.getElementById('player');
@@ -1595,7 +1723,7 @@ adminForm.addEventListener('submit', async e => {
   addBtn.disabled = false;
 
   // Al davant de tot, igual que fa el Worker.
-  ownVideos.unshift({ id: video.id, title: video.title, date: video.date_added, own: true });
+  ownVideos.unshift({ id: video.id, title: video.title, description: video.description || '', date: video.date_added, own: true });
   render();
   adminForm.reset();
   setMsg('Vídeo afegit a la galeria.', 'ok');
