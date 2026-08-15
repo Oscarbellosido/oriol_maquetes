@@ -6,20 +6,24 @@
  * a la galeria: els vídeos nous s'afegeixen al davant i l'administrador el pot
  * canviar arrossegant les targetes.
  *
- *   GET    /?action=list           → llista pública (CORS obert)
- *   GET    /?action=visit          → suma una visita i retorna el total
- *   GET    /?action=stats          → retorna el total de visites, sense sumar-ne
- *   GET    /?action=play&id=ID     → suma una reproducció i retorna la del vídeo
- *   GET    /?action=playcounts     → { id: reproduccions } de tots els vídeos
- *   POST   /?action=add            → body { id, title }                    · X-Admin-Secret
- *   POST   /?action=update         → body { id, title?, description? }    · X-Admin-Secret
- *   POST   /?action=reorder        → body { ids: [...] }  · X-Admin-Secret
- *   DELETE /?action=remove&id=ID   → elimina un vídeo      · X-Admin-Secret
+ *   GET    /?action=list              → llista pública (CORS obert)
+ *   GET    /?action=visit             → suma una visita i retorna el total
+ *   GET    /?action=stats             → retorna el total de visites, sense sumar-ne
+ *   GET    /?action=play&id=ID        → suma una reproducció i retorna la del vídeo
+ *   GET    /?action=playcounts        → { id: reproduccions } de tots els vídeos
+ *   GET    /?action=get-config&key=K  → retorna { key, value } d'una clau de config
+ *   POST   /?action=add               → body { id, title }                    · X-Admin-Secret
+ *   POST   /?action=update            → body { id, title?, description? }    · X-Admin-Secret
+ *   POST   /?action=reorder           → body { ids: [...] }  · X-Admin-Secret
+ *   POST   /?action=set-config        → body { key, value }  · X-Admin-Secret
+ *   DELETE /?action=remove&id=ID      → elimina un vídeo      · X-Admin-Secret
  */
 
 const KEY = 'videos';
 const VISITS_KEY = 'visits';
 const PLAYS_KEY = 'play_counts';
+const CONFIG_PREFIX = 'config:';
+const CONFIG_ALLOWED_KEYS = ['intro_text'];
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -234,6 +238,39 @@ export default {
 
       await writeVideos(env, rest);
       return json({ ok: true, removed: id });
+    }
+
+    // Llegeix un valor de configuració global (públic).
+    if (request.method === 'GET' && action === 'get-config') {
+      const key = (searchParams.get('key') || '').trim();
+      if (!CONFIG_ALLOWED_KEYS.includes(key)) return json({ error: 'Clau de config desconeguda' }, 400);
+      const value = await env.VIDEOS_KV.get(CONFIG_PREFIX + key);
+      return json({ key, value: value ?? null });
+    }
+
+    // Desa un valor de configuració global (només administrador).
+    if (request.method === 'POST' && action === 'set-config') {
+      if (!secretOk(request, env)) return json({ error: 'No autoritzat' }, 401);
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: 'JSON invàlid' }, 400);
+      }
+
+      const key = typeof body?.key === 'string' ? body.key.trim() : '';
+      const value = typeof body?.value === 'string' ? body.value.trim() : null;
+      if (!CONFIG_ALLOWED_KEYS.includes(key)) return json({ error: 'Clau de config desconeguda' }, 400);
+      if (value === null) return json({ error: 'Falta el valor' }, 400);
+      if (value.length > 500) return json({ error: 'El valor és massa llarg (màx 500 caràcters)' }, 400);
+
+      if (value) {
+        await env.VIDEOS_KV.put(CONFIG_PREFIX + key, value);
+      } else {
+        await env.VIDEOS_KV.delete(CONFIG_PREFIX + key);
+      }
+      return json({ ok: true, key, value });
     }
 
     return json({ error: 'Ruta desconeguda' }, 404);

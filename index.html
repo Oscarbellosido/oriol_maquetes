@@ -355,6 +355,26 @@ h1 .dot { color: var(--accent); }
   transition: box-shadow 0.22s var(--ease);
 }
 .desc-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
+/* Text de presentació editable (subtítol de capçalera). */
+.subtitle.editable { cursor: text; }
+.subtitle.editable::after {
+  content: ' ✏️';
+  font-size: 0.82em;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.subtitle.editable:hover::after { opacity: 0.9; }
+.subtitle.editing::after { content: none; }
+.subtitle-input {
+  display: block; width: 100%;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-accent); border-radius: var(--r-sm);
+  padding: 0.45rem 0.65rem;
+  font: inherit; font-size: inherit; line-height: inherit;
+  outline: none; resize: vertical; min-height: 3em;
+  transition: box-shadow 0.22s var(--ease);
+}
+.subtitle-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .card-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; }
 .date { color: var(--text-dim); font-size: 0.76rem; }
 .badge {
@@ -685,7 +705,7 @@ footer a:hover { text-decoration: underline; }
         </button>
       </div>
     </div>
-    <p class="subtitle">Galeria de maquetes de cotxes a escala 1/24. Fes clic a qualsevol targeta per veure el vídeo sense sortir de la pàgina.</p>
+    <p class="subtitle" id="subtitleEl">Galeria de maquetes de cotxes a escala 1/24. Fes clic a qualsevol targeta per veure el vídeo sense sortir de la pàgina.</p>
     <p class="head-count" id="headCount" role="status" aria-live="polite"></p>
   </header>
 
@@ -888,6 +908,7 @@ function getSecret() {
 function forgetSecret() {
   try { localStorage.removeItem(SECRET_KEY); } catch {}
   updateSecretUi();
+  updateSubtitleEditable();
   render();
 }
 
@@ -903,6 +924,7 @@ function changeSecret() {
   if (s) {
     try { localStorage.setItem(SECRET_KEY, s); } catch {}
     updateSecretUi();
+    updateSubtitleEditable();
     render();
     toast('Contrasenya desada en aquest navegador');
   } else if (had) {
@@ -1654,6 +1676,99 @@ async function saveDescription(v, description, before) {
   }
 }
 
+/* ── Text de presentació editable (subtítol) ───────────────────────────────── */
+const subtitleEl = document.getElementById('subtitleEl');
+
+// Carrega el text desat al Worker (si n'hi ha) i actualitza el subtítol.
+async function loadIntroText() {
+  try {
+    const data = await api('?action=get-config&key=intro_text');
+    if (data && data.value) subtitleEl.textContent = data.value;
+  } catch {
+    // Si falla (p. ex. xarxa), deixem el text per defecte que hi ha a l'HTML.
+  }
+}
+
+// Activa l'edició inline del subtítol (igual que editTitle/editDescription).
+function editSubtitle() {
+  if (subtitleEl.classList.contains('editing')) return;
+
+  const before = subtitleEl.textContent;
+  subtitleEl.classList.add('editing');
+  subtitleEl.textContent = '';
+
+  const input = document.createElement('textarea');
+  input.className = 'subtitle-input';
+  input.value = before;
+  input.maxLength = 500;
+  input.setAttribute('aria-label', 'Text de presentació de la galeria');
+  subtitleEl.appendChild(input);
+
+  input.focus();
+  input.select();
+
+  let closed = false;
+  function finish(save) {
+    if (closed) return;
+    closed = true;
+    subtitleEl.classList.remove('editing');
+
+    const next = input.value.trim();
+    if (!save || !next || next === before) {
+      subtitleEl.textContent = before;
+      return;
+    }
+    subtitleEl.textContent = next;
+    saveSubtitle(next, before);
+  }
+
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    // Enter sense Shift desa; Shift+Enter fa un salt de línia normal.
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+async function saveSubtitle(value, before) {
+  const secret = getSecret();
+  if (!secret) { subtitleEl.textContent = before; return; }
+
+  try {
+    await api('?action=set-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+      body: JSON.stringify({ key: 'intro_text', value }),
+    });
+    toast('Text de presentació desat');
+  } catch (err) {
+    subtitleEl.textContent = before;
+    toast(err.status === 401 ? 'Contrasenya incorrecta' : `No s'ha pogut desar el text: ${err.message}`);
+  }
+}
+
+// Activa o desactiva l'editable del subtítol segons si hi ha contrasenya.
+function updateSubtitleEditable() {
+  if (hasSecret()) {
+    subtitleEl.classList.add('editable');
+    subtitleEl.title = 'Doble clic per canviar el text de presentació';
+    if (!subtitleEl._subtitleBound) {
+      subtitleEl._subtitleBound = true;
+      subtitleEl.addEventListener('dblclick', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        editSubtitle();
+      });
+    }
+  } else {
+    subtitleEl.classList.remove('editable');
+    subtitleEl.title = '';
+  }
+}
+
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 const modal      = document.getElementById('modal');
 const player     = document.getElementById('player');
@@ -1858,9 +1973,11 @@ document.addEventListener('keydown', e => {
 });
 
 updateSecretUi();
+updateSubtitleEditable();
 render({ animate: true });
 refresh();
 countVisit();
+loadIntroText();
 document.getElementById('app-version').textContent = `v${APP_VERSION}`;
 </script>
 
