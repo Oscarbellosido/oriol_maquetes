@@ -9,6 +9,8 @@
  *   GET    /?action=list           → llista pública (CORS obert)
  *   GET    /?action=visit          → suma una visita i retorna el total
  *   GET    /?action=stats          → retorna el total de visites, sense sumar-ne
+ *   GET    /?action=play&id=ID     → suma una reproducció i retorna la del vídeo
+ *   GET    /?action=playcounts     → { id: reproduccions } de tots els vídeos
  *   POST   /?action=add            → body { id, title }                    · X-Admin-Secret
  *   POST   /?action=update         → body { id, title?, description? }    · X-Admin-Secret
  *   POST   /?action=reorder        → body { ids: [...] }  · X-Admin-Secret
@@ -17,6 +19,7 @@
 
 const KEY = 'videos';
 const VISITS_KEY = 'visits';
+const PLAYS_KEY = 'play_counts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +61,19 @@ async function readVisits(env) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+// Reproduccions per vídeo, com un sol objecte { id: comptador }. Es filtra el
+// que hi hagi desat: així una clau escrita a mà no arriba mai al client.
+async function readPlays(env) {
+  const raw = await env.VIDEOS_KV.get(PLAYS_KEY, { type: 'json' });
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const plays = {};
+  for (const [id, value] of Object.entries(raw)) {
+    const n = Number(value);
+    if (validId(id) && Number.isFinite(n) && n > 0) plays[id] = Math.floor(n);
+  }
+  return plays;
+}
+
 // Comparació en temps constant, per no filtrar el secret amb el temps de resposta.
 function secretOk(request, env) {
   const given = request.headers.get('X-Admin-Secret') || '';
@@ -96,6 +112,22 @@ export default {
 
     if (request.method === 'GET' && action === 'stats') {
       return json({ visits: await readVisits(env) });
+    }
+
+    // Una reproducció d'un vídeo. Té la mateixa limitació que les visites: si
+    // dues arriben alhora, se'n pot perdre alguna. És un comptador orientatiu.
+    if (request.method === 'GET' && action === 'play') {
+      const id = (searchParams.get('id') || '').trim();
+      if (!validId(id)) return json({ error: "L'ID del vídeo no és vàlid" }, 400);
+
+      const plays = await readPlays(env);
+      plays[id] = (plays[id] || 0) + 1;
+      await env.VIDEOS_KV.put(PLAYS_KEY, JSON.stringify(plays));
+      return json({ id, plays: plays[id] });
+    }
+
+    if (request.method === 'GET' && action === 'playcounts') {
+      return json(await readPlays(env));
     }
 
     // ── Administració ────────────────────────────────────────────────────────

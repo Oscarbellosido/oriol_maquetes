@@ -383,6 +383,19 @@ h1 .dot { color: var(--accent); }
   .card.has-new .card-actions { top: 2.9rem; }
 }
 
+/* Reproduccions obertes des d'aquesta galeria, a la cantonada baixa de la
+   miniatura. Només hi és quan n'hi ha alguna: un «▶ 0» no diu res a ningú. */
+.card-plays {
+  position: absolute; left: 0.65rem; bottom: 0.65rem; z-index: 4;
+  background: var(--overlay); color: #fff;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 7px; padding: 0.2rem 0.45rem;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+  backdrop-filter: blur(4px);
+  pointer-events: none;                  /* el clic és de la targeta */
+}
+.card-plays[hidden] { display: none; }
+
 /* Accions de la targeta: compartir sempre, i eliminar només a les del servidor.
    Van fora del botó .card-main, que no pot contenir altres botons. */
 .card-actions {
@@ -922,6 +935,49 @@ function countVisit() {
     .catch(() => {});
 }
 
+/* ── Reproduccions ─────────────────────────────────────────────────────────── */
+// { id: quantes vegades s'ha obert el reproductor }. Es carrega en obrir la
+// pàgina i es va actualitzant a mesura que es miren vídeos. Com les visites, és
+// un comptador orientatiu: si el Worker no respon, la galeria no se n'assabenta.
+let playCounts = {};
+
+async function fetchPlayCounts() {
+  try {
+    const data = await api('?action=playcounts');
+    if (data && typeof data === 'object' && !Array.isArray(data)) playCounts = data;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function setCardPlays(card, n) {
+  const el = card.querySelector('.card-plays');
+  if (!el) return;
+  el.hidden = !(n > 0);
+  if (!(n > 0)) return;
+  el.textContent = `▶ ${n.toLocaleString('ca-ES')}`;
+  el.title = n === 1 ? '1 reproducció des d\'aquesta galeria' : `${n} reproduccions des d'aquesta galeria`;
+}
+
+// Suma la reproducció al servidor i posa el número al dia a la targeta. El
+// número puja de seguida —sense esperar el Worker— i es corregeix amb el que
+// respongui; si no respon, es queda amb el nostre compte fins a la recàrrega.
+function countPlay(v) {
+  showPlays(v.id, (playCounts[v.id] || 0) + 1);
+  api(`?action=play&id=${encodeURIComponent(v.id)}`)
+    .then(data => {
+      const n = Number(data && data.plays);
+      if (Number.isFinite(n) && n > 0) showPlays(v.id, n);
+    })
+    .catch(() => {});
+}
+
+function showPlays(id, n) {
+  playCounts[id] = n;
+  const card = grid.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  if (card) setCardPlays(card, n);
+}
+
 async function fetchRemote() {
   const data = await api('?action=list');
   const known = new Set(VIDEOS.map(v => v.id));
@@ -1003,6 +1059,7 @@ function makeCard(v, i, animate) {
         <img class="thumb" loading="lazy" alt="" draggable="false" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg">
         <span class="thumb-hit" aria-hidden="true"></span>
         <span class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+        <span class="card-plays" hidden></span>
         ${fresh ? '<span class="badge-new">NOU</span>' : ''}
       </div>
       <div class="card-body">
@@ -1018,6 +1075,7 @@ function makeCard(v, i, animate) {
 
   const main = card.querySelector('.card-main');
   main.setAttribute('aria-label', `Reprodueix ${v.title}`);
+  setCardPlays(card, playCounts[v.id] || 0);
   const title = card.querySelector('.card-title');
   title.textContent = v.title;
   card.querySelector('.date').textContent = v.own ? `Afegit el ${formatDate(v.date)}` : formatDate(v.date);
@@ -1102,6 +1160,11 @@ function makeCard(v, i, animate) {
     grip.textContent = '⠿';
     grip.title = 'Arrossega per canviar l\'ordre';
     grip.setAttribute('aria-hidden', 'true');
+    // A les pantalles tàctils no hi ha «dragstart»: el gest s'arrenca aquí.
+    grip.addEventListener('touchstart', e => {
+      if (!startTouchDrag(card)) return;
+      e.preventDefault();          // ni scroll, ni selecció, ni clic simulat
+    }, { passive: false });
     card.appendChild(grip);
   }
 
@@ -1304,6 +1367,44 @@ function endDrag() {
   dragId = null;
 }
 
+/* ── El mateix, amb el dit (mòbil i tauleta) ───────────────────────────────── */
+// Les pantalles tàctils no fan «dragstart»: el gest s'ha de seguir a mà. La
+// nansa engega l'arrossegament, el dit va assenyalant per on caurà i en aixecar
+// -lo es fa el mateix que amb el ratolí. Es reaprofita l'estat de dalt (dragId,
+// dropTarget…), o sigui que un gest no pot ser de tots dos tipus alhora.
+function startTouchDrag(card) {
+  if (!canReorder() || savingOrder || dragId) return false;
+  dragId = card.dataset.id;
+  dragging = true;
+  stopAllPreviews();
+  card.classList.add('dragging');
+  return true;
+}
+
+// Els escoltadors van al document i no a la graella: el dit se'n pot sortir, i
+// el gest s'ha de poder acabar igualment.
+document.addEventListener('touchmove', e => {
+  if (!dragId) return;
+  e.preventDefault();                      // res de scroll mentre s'arrossega
+  const t = e.touches[0];
+  if (!t) return;
+  // Sota el dit no hi ha «target» que valgui: cal preguntar-ho al document.
+  const card = document.elementFromPoint(t.clientX, t.clientY)?.closest?.('.card[data-own="1"]');
+  if (!card || card.dataset.id === dragId) { clearDropMark(); return; }
+  // Meitat esquerra, va al davant; meitat dreta, al darrere. Igual que amb el ratolí.
+  const box = card.getBoundingClientRect();
+  markDrop(card, t.clientX > box.left + box.width / 2);
+}, { passive: false });
+
+document.addEventListener('touchend', () => {
+  if (!dragId) return;
+  const id = dragId, overId = dropTarget?.dataset.id, after = dropAfter;
+  endDrag();                               // abans de moure res, com al «drop»
+  if (overId) moveVideo(id, overId, after);
+});
+
+document.addEventListener('touchcancel', () => { if (dragId) endDrag(); });
+
 // Treu el vídeo d'on és i el torna a posar tocant a l'altre. Repinta de seguida
 // —l'ordre nou es veu sense esperar el servidor— i el desa; si el rebutja, es
 // torna enrere.
@@ -1352,15 +1453,16 @@ search.addEventListener('input', () => render());
 
 // Carrega la llista del Worker i refresca la galeria.
 async function refresh() {
+  const counts = fetchPlayCounts();     // alhora que la llista; no la fa esperar
   try {
     ownVideos = await fetchRemote();
   } catch (err) {
     toast('No s\'ha pogut carregar la llista del servidor');
     console.error(err);
-  } finally {
-    loading = false;
-    render({ animate: true });
   }
+  await counts;                         // fetchPlayCounts() no llança mai
+  loading = false;
+  render({ animate: true });
 }
 
 async function removeOwn(v) {
@@ -1572,6 +1674,7 @@ function openModal(v) {
   updateModalNav();
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+  countPlay(v);
 }
 
 function closeModal() {
@@ -1643,7 +1746,7 @@ function updateSecretUi() {
   const has = hasSecret();
   secretBtn.textContent = has ? 'Canviar contrasenya' : 'Posar contrasenya';
   secretState.textContent = has
-    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿) i deixa-les anar sobre la que han de precedir o seguir; això només es pot fer en mode graella (⊞), no en masonry. Fes doble clic al títol (✏️) per canviar-lo.'
+    ? 'La contrasenya està desada en aquest navegador; no te la tornarà a demanar. Arrossega les targetes (n\'hi ha prou amb la nansa ⠿, també amb el dit) i deixa-les anar sobre la que han de precedir o seguir; això només es pot fer en mode graella (⊞), no en masonry. Fes doble clic al títol (✏️) per canviar-lo.'
     : 'Es demanarà la contrasenya en afegir o eliminar un vídeo.';
 }
 
