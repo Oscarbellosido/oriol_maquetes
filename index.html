@@ -125,7 +125,7 @@ header { position: relative; padding-top: 1.75rem; margin-bottom: 3.5rem; text-a
 .brand { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .logo {
   flex-shrink: 0;
-  width: 96px; height: 48px;
+  width: 140px; height: 70px;
   display: grid; place-items: center;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
@@ -133,7 +133,7 @@ header { position: relative; padding-top: 1.75rem; margin-bottom: 3.5rem; text-a
 [data-theme="light"] .logo img { filter: invert(1); }
 h1 {
   font-family: var(--font-display);
-  font-size: clamp(1.9rem, 1.3rem + 2.1vw, 2.9rem);
+  font-size: clamp(2.4rem, 1.6rem + 2.8vw, 3.8rem);
   font-weight: 700; letter-spacing: -0.03em; line-height: 1.05;
 }
 h1 .dot { color: var(--accent); }
@@ -637,7 +637,7 @@ footer a:hover { text-decoration: underline; }
   body { padding: 1.75rem 1rem 6rem; }
   /* En mòbil les accions no caben al costat: passen a sota del títol, centrades. */
   header { padding-top: 0; margin-bottom: 2.25rem; }
-  .logo { width: 82px; height: 42px; border-radius: 11px; }
+  .logo { width: 110px; height: 55px; border-radius: 11px; }
   .topbar { gap: 1.15rem; }
   .head-actions { position: static; justify-content: center; gap: 0.55rem; }
   .subtitle { font-size: 0.94rem; margin-top: 1.15rem; }
@@ -679,7 +679,6 @@ footer a:hover { text-decoration: underline; }
           <h1>Maquetes</h1>
         </div>
       </div>
-      <p class="brand-escala">Escala 1/24</p>
       <div class="head-actions">
         <!-- En pantalles molt estretes només hi queda la icona: cal l'etiqueta. -->
         <a class="channel-link" href="https://youtube.com/@maquetes-f1n" target="_blank" rel="noopener"
