@@ -6,6 +6,8 @@
 <title>Maquetes — Galeria de vídeos</title>
 <meta name="theme-color" content="#0f0f16">
 <meta name="description" content="Galeria de vídeos de maquetes de cotxes a escala 1/24 del canal @maquetes-f1n.">
+<link rel="icon" type="image/png" href="images/car-logo.png">
+<link rel="apple-touch-icon" href="images/car-logo.png">
 
 <!-- El tema s'aplica abans de pintar res, perquè no parpellegi en carregar. -->
 <script>
@@ -125,7 +127,9 @@ header { position: relative; padding-top: 1.75rem; margin-bottom: 3.5rem; text-a
   flex-shrink: 0;
   width: 96px; height: 48px;
   display: grid; place-items: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
+.logo:hover { transform: scale(1.08); opacity: 0.85; }
 [data-theme="light"] .logo img { filter: invert(1); }
 h1 {
   font-family: var(--font-display);
@@ -1224,7 +1228,7 @@ function stopAllPreviews() {
 
 // Comparteix amb el diàleg del sistema si n'hi ha; si no, copia l'enllaç.
 async function shareVideo(v) {
-  const url = `https://youtube.com/watch?v=${v.id}`;
+  const url = location.origin + location.pathname + '?v=' + v.id;
   if (navigator.share) {
     try {
       await navigator.share({ title: v.title, url });
@@ -1786,6 +1790,7 @@ function openModal(v) {
   updateModalNav();
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+  history.replaceState(null, '', '?v=' + v.id);
   countPlay(v);
 }
 
@@ -1794,6 +1799,7 @@ function closeModal() {
   player.replaceChildren();          // atura la reproducció
   currentVideo = null;
   document.body.style.overflow = '';
+  history.replaceState(null, '', location.pathname);
 }
 
 // Posició del vídeo obert dins de la llista que es veu; -1 si la cerca l'ha
@@ -1964,6 +1970,17 @@ document.addEventListener('keydown', e => {
 updateSecretUi();
 updateSubtitleEditable();
 render({ animate: true });
+// Deep link: obre el modal si hi ha ?v= a la URL
+(function() {
+  const vId = new URLSearchParams(location.search).get('v');
+  if (!vId) return;
+  let tries = 0;
+  const t = setInterval(() => {
+    const found = allVideos().find(v => v.id === vId);
+    if (found) { clearInterval(t); openModal(found); }
+    else if (++tries > 25) clearInterval(t);
+  }, 200);
+})();
 refresh();
 countVisit();
 loadIntroText();
