@@ -6,8 +6,12 @@
 <title>Maquetes — Galeria de vídeos</title>
 <meta name="theme-color" content="#0f0f16">
 <meta name="description" content="Galeria de vídeos de maquetes de cotxes a escala 1/24 del canal @maquetes-f1n.">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="images/car-logo.png">
-<link rel="apple-touch-icon" href="images/car-logo.png">
+<link rel="apple-touch-icon" href="images/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Maquetes F1">
 
 <!-- El tema s'aplica abans de pintar res, perquè no parpellegi en carregar. -->
 <script>
@@ -1985,6 +1989,6 @@ countVisit();
 loadIntroText();
 document.getElementById('app-version').textContent = `v${APP_VERSION}`;
 </script>
-
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </body>
 </html>

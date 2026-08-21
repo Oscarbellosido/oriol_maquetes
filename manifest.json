@@ -1,0 +1,13 @@
+{
+  "name": "Maquetes F1",
+  "short_name": "Maquetes",
+  "description": "Galeria de vídeos de maquetes de cotxes a escala",
+  "start_url": "/oriol_maquetes/",
+  "display": "standalone",
+  "background_color": "#0f0f16",
+  "theme_color": "#0f0f16",
+  "icons": [
+    { "src": "images/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "images/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
